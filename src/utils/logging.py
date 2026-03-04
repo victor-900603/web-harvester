@@ -4,11 +4,12 @@ from typing import Optional
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from colorlog import ColoredFormatter
 
 
 def setup_logging(
-    level: str, 
-    log_format: str,
+    level: str = "INFO", 
+    log_format: Optional[str] = None,
     log_file: Optional[str] = None,
     max_bytes: int = 10 * 1024 * 1024,  # 10 MB
     backup_count: int = 5,
@@ -23,18 +24,29 @@ def setup_logging(
         backup_count (int): The number of backup log files to keep.
     """
     
-    
     if log_format is None:
         log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        color_log_format = "%(log_color)s" + log_format
         
     main_logger = logging.getLogger()
     main_logger.setLevel(getattr(logging, level.upper()))
     
     main_logger.handlers.clear()
     
+    # Console handler with color
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, level.upper()))
-    console_handler.setFormatter(logging.Formatter(log_format))
+    console_formatter = ColoredFormatter(
+        color_log_format,
+        log_colors={
+            'DEBUG': 'cyan',
+            'INFO': 'green',
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'bold_red',
+        }
+    )
+    console_handler.setFormatter(console_formatter)
     main_logger.addHandler(console_handler)
     
     if log_file:
