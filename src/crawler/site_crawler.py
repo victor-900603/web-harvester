@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+import logging
+from typing import Generator, Union, Any, Dict, Optional
+from urllib.parse import urljoin
+
+from ..core import Item, Request, Response
+from ..parsers import HTMLParser, JSONParser
+
+from .base import BaseCrawler
+
+logger = logging.getLogger(__name__)
+
+class SiteCrawler(BaseCrawler):
+    def __init__(self, site_config: Dict[str, Any]):
+        self._config = site_config
+        self.name = site_config.get("name", "unknown")
+        self.base_url = site_config.get("base_url", "")
+        self._list_cfg = site_config.get("list_page", {})
+        self._article_cfg = site_config.get("article_page", {})
+        self._request_cfg = site_config.get("request", {})
+        
+    def start_requests(self) -> Generator[Request, None, None]:
+        """Generate initial requests to start crawling the site."""
+        list_url = self._list_cfg.get("url", self.base_url)
+        pagination = self._list_cfg.get("pagination", {})
+        
+        headers = self._request_cfg.get("headers", {})
+        cookies = self._request_cfg.get("cookies", {})
+        
+        if pagination.get("enabled", False):
+            start = pagination.get("start", 1)
+            max_pages = pagination.get("max_pages", 1)
+            
+            for page_num in range(start, start + max_pages):
+                url = list_url.format(page=page_num)
+                yield Request(
+                    url=url, 
+                    headers=headers, 
+                    cookies=cookies, 
+                    callback="parse_list",
+                    meta={"page": page_num}, 
+                )
+        else:
+            yield Request(
+                url=list_url, 
+                headers=headers, 
+                cookies=cookies, 
+                callback="parse_list", 
+            )
+    
+    def parse(self, response: Response) -> Generator[Union[Request, Item], None, None]:
+        """Parse the response and yield items or new requests."""
+        yield from self.parse_list(response)
+        
+    def parse_list(self, response: Response) -> Generator[Union[Request, Item], None, None]:
+        """Parse a list page and yield article requests or items."""
+        list_type = self._list_cfg.get("type", "html")
+        selector = self._list_cfg.get("selector", "")
+        headers = self._request_cfg.get("headers", {})
+        cookies = self._request_cfg.get("cookies", {})
+        
+        if list_type == "json":
+            yield from self._parse_json_list(response, selector, headers, cookies)
+        else:
+            yield from self._parse_html_list(response, selector, headers, cookies)
+            
+    def _parse_html_list(
+        self, 
+        response: Response, 
+        selector: str, 
+        headers: dict, 
+        cookies: dict
+    ) -> Generator[Union[Request, Item], None, None]:
+        """Parse an HTML list page and yield article requests or items."""
+        
+        parser = HTMLParser(response.text)
+        
+        items_selector = selector.get("items", "a")
+        link_selector = selector.get("link", "a")
+        link_attr = selector.get("link_attr", "href")
+        
+        for item_elem in parser.select(items_selector):
+            link_elem = item_elem.select_one(link_selector) if link_selector != items_selector else item_elem
+            if not link_elem:
+                continue
+            
+            href = link_elem.get(link_attr, "") if link_attr != "text" else link_elem.get_text(strip=True)
+            if not href:
+                continue
+            
+            url = urljoin(self.base_url, href)
+            
+            if self._article_cfg:
+                yield Request(
+                    url=url, 
+                    headers=headers, 
+                    cookies=cookies, 
+                    callback="parse_article", 
+                    meta={"list_url": response.url}
+                )
+            else:
+                yield Item(
+                    data={"url": url},
+                    source=self.name,
+                    url=url,
+                    item_type="link",
+                )
+                
+    def _parse_json_list(
+        self,
+        response: Response,
+        selectors: Dict[str, Any],
+        headers: Dict,
+        cookies: Dict,
+    ) -> Generator[Union[Item, Request], None, None]:
+        """Parse a JSON list response and yield article requests or items."""
+        parser = JSONParser(response.text)
+
+        items_path = selectors.get("items", "")
+        url_field = selectors.get("url_field", "url")
+        url_template = selectors.get("url_template", "{url}")
+
+        items = parser.extract_path(items_path) if items_path else parser.data
+        if not isinstance(items, list):
+            items = [items]
+
+        for item_data in items:
+            raw_url = item_data.get(url_field, "") if isinstance(item_data, dict) else ""
+            url = url_template.format(url=raw_url, **item_data) if isinstance(item_data, dict) else str(raw_url)
+            url = urljoin(self.base_url, url)
+
+            if self._article_cfg:
+                yield Request(
+                    url=url,
+                    headers=headers,
+                    cookies=cookies,
+                    callback="parse_article",
+                    meta={"list_data": item_data, "list_url": response.url},
+                )
+            else:
+                yield Item(
+                    data=item_data if isinstance(item_data, dict) else {"value": item_data},
+                    source=self.name,
+                    url=url,
+                )
+                
+    def parse_article(
+        self, response: Response
+    ) -> Generator[Union[Item, Request], None, None]:
+        """Parse an article page and yield an item with the extracted data."""
+        article_type = self._article_cfg.get("type", "html")
+        selectors = self._article_cfg.get("selectors", {})
+
+        if article_type == "json":
+            data = self._extract_article_json(response, selectors)
+        else:
+            data = self._extract_article_html(response, selectors)
+
+        list_data = response.meta.get("list_data", {})
+        if isinstance(list_data, dict):
+            for k, v in list_data.items():
+                data.setdefault(k, v)
+
+        data.setdefault("url", response.url)
+
+        yield Item(
+            data=data,
+            source=self.name,
+            url=response.url,
+            item_type="article",
+        )
+        
+
+    def _extract_article_html(
+        self, response: Response, selectors: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract fields from an HTML article page using the provided selectors."""
+        parser = HTMLParser(response.text)
+        data: Dict[str, Any] = {}
+
+        for field_name, field_cfg in selectors.items():
+            if isinstance(field_cfg, str):
+                # 簡寫: "title": "h1" => selector=h1, attr=text
+                value = parser.extract_text(field_cfg)
+            elif isinstance(field_cfg, dict):
+                selector = field_cfg.get("selector", "")
+                attr = field_cfg.get("attr", "text")
+                value = parser.extract(selector, attr)
+            else:
+                continue
+
+            if value is not None:
+                data[field_name] = value
+
+        return data
+
+    def _extract_article_json(
+        self, response: Response, selectors: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract fields from a JSON article page using the provided selectors."""
+        parser = JSONParser(response.text)
+        data: Dict[str, Any] = {}
+
+        for field_name, field_cfg in selectors.items():
+            if isinstance(field_cfg, str):
+                value = parser.extract_path(field_cfg)
+            elif isinstance(field_cfg, dict):
+                path = field_cfg.get("path", "")
+                value = parser.extract_path(path)
+            else:
+                continue
+
+            if value is not None:
+                data[field_name] = value
+
+        return data
