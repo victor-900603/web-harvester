@@ -1,0 +1,82 @@
+# ============================================================
+# Example Site Configuration
+# ============================================================
+# Configuration for a news website. This file defines how to crawl and parse the site.
+# You can customize the settings according to the structure of the target website.
+
+name: "example"
+base_url: "https://example.com"
+
+# Limits for crawling and data collection.
+limits:
+  max_items: 50
+  max_pages: 5
+  max_items_per_page: 10
+
+  timeout: 300
+
+# HTTP request settings, including headers and cookies.
+request:
+  headers:
+    Referer: "https://example.com"
+  cookies: {}
+
+# List page configuration: how to find article links and handle pagination.
+list_page:
+  url: "https://example.com/news?page={page}"
+  method: "GET"
+  type: "html"                # html | json
+
+  # HTML selectors to extract article links from the list page.
+  selectors:
+    items: "article.news-item" 
+    link: "a"
+    link_attr: "href"
+
+  # JSON selectors to extract article links if the list page returns JSON.
+  # selectors:
+  #   items: "data.articles"
+  #   url_field: "url"  
+  #   url_template: "https://example.com{url}" 
+
+  # Pagination settings to control how many pages to crawl and where to start.
+  pagination:
+    enabled: true
+    start: 1
+    max_pages: 5
+
+article_page:
+  type: "html"                # html | json
+
+  # HTML selectors to extract article details from the article page.
+  selectors:
+    title: "h1.article-title"
+
+    content:
+      selector: "div.article-body"
+      attr: "text"
+
+    date:
+      selector: "time.publish-date"
+      attr: "datetime"
+
+    author:
+      selector: "span.author-name"
+      attr: "text"
+
+    category:
+      selector: "span.category"
+      attr: "text"
+
+    url:
+      selector: "link[rel='canonical']"
+      attr: "href"
+
+  # JSON selectors to extract article details if the article page returns JSON.
+  # selectors:
+  #   title: "data.title"
+  #   content: "data.content"
+  #   date: "data.publish_date"
+  #   author: "data.author"
+  #   category: "data.category"
+  #   url: "data.url"
