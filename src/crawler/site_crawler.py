@@ -170,10 +170,10 @@ class SiteCrawler(BaseCrawler):
         else:
             data = self._extract_article_html(response, selectors)
 
-        list_data = response.meta.get("list_data", {})
-        if isinstance(list_data, dict):
-            for k, v in list_data.items():
-                data.setdefault(k, v)
+        # list_data = response.meta.get("list_data", {})
+        # if isinstance(list_data, dict):
+        #     for k, v in list_data.items():
+        #         data.setdefault(k, v)
 
         data.setdefault("url", response.url)
 
@@ -194,7 +194,6 @@ class SiteCrawler(BaseCrawler):
 
         for field_name, field_cfg in selectors.items():
             if isinstance(field_cfg, str):
-                # 簡寫: "title": "h1" => selector=h1, attr=text
                 value = parser.extract_text(field_cfg)
             elif isinstance(field_cfg, dict):
                 selectors = field_cfg.get("selector", {})

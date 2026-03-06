@@ -2,4 +2,6 @@ from .request import Request
 from .response import Response
 from .item import Item
 
-__all__ = ["Request", "Response", "Item"]
+from .engine import CrawlerEngine, build_engine
+
+__all__ = ["Request", "Response", "Item", "CrawlerEngine", "build_engine"]

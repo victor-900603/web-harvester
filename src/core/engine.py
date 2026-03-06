@@ -14,7 +14,8 @@ from .request import Request
 from .response import Response
 from .item import Item
 
-from ..crawler.base import BaseCrawler
+from ..crawler import BaseCrawler
+from ..storage import BaseStorage, JSONStorage
 from ..utils.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ class CrawlerEngine:
             settings (Dict[str, Any]): A dictionary of engine configuration settings.
         """
         self.settings = settings or Settings()
+        self.storages: List[BaseStorage] = []
         
         # engine configuration
         engine_cfg = self.settings.get("engine", {})
@@ -37,6 +39,19 @@ class CrawlerEngine:
         self._request_timeout = engine_cfg.get("request_timeout", 30)
         self._download_delay = engine_cfg.get("download_delay", 1.0)
         self._max_retries = engine_cfg.get("max_retries", 3)
+        
+    def add_storage(self, storage: BaseStorage) -> CrawlerEngine:
+        """Add a storage backend to the engine.
+        
+        Args:
+            storage (BaseStorage): An instance of a storage backend to add.
+            
+        Returns:
+            CrawlerEngine: The engine instance (for chaining).
+        """
+        self.storages.append(storage)
+        logger.debug(f"Added storage backend: {storage.__class__.__name__}")
+        return self
         
     def run(self, crawler: BaseCrawler) -> List[Item]:
         """Run the crawler and return the collected items.
@@ -56,6 +71,7 @@ class CrawlerEngine:
             else:
                 raise ValueError(f"Invalid engine mode: {self._mode}")
         finally:
+            self.close()
             logger.info(f"Crawler finished: {crawler.name}")
             
     def _run_sync(self, crawler: BaseCrawler) -> List[Item]:
@@ -101,6 +117,7 @@ class CrawlerEngine:
                     queue.append(result)
                 elif isinstance(result, Item):
                     items.append(result)
+                    self._store(result)
                 else:
                     logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
                     
@@ -149,6 +166,7 @@ class CrawlerEngine:
                 params=request.params or None,
                 data=request.body,
                 json=request.json_body,
+                timeout=self._request_timeout,
             )
             
             return Response(
@@ -160,3 +178,33 @@ class CrawlerEngine:
                 request=request,
                 encoding=response.encoding or "utf-8",
             )
+            
+    def _store(self, item: Item) -> None:
+        """Save an item using all configured storage backends."""
+        for storage in self.storages:
+            try:
+                storage.save(item)
+            except Exception as e:
+                logger.error(f"Failed to save item with {storage.__class__.__name__}: {e}")
+            
+    def close(self) -> None:
+        """Close any resources used by the engine, such as storage backends."""
+        for storage in self.storages:
+            try:
+                storage.close()
+            except Exception as e:
+                pass
+            
+        logger.info("Crawler engine resources have been cleaned up.")
+
+def build_engine(settings: Settings) -> CrawlerEngine:
+    engine = CrawlerEngine(settings)
+    
+    # Storage
+    json_cfg = settings.get("json_storage", {})
+    if json_cfg.get("enabled", False):
+        engine.add_storage(JSONStorage(
+            output_dir=json_cfg.get("output_dir", "data/json"),
+        ))
+        
+    return engine
