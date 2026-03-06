@@ -64,3 +64,4 @@ def setup_logging(
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)

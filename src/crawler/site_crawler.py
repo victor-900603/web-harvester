@@ -50,25 +50,32 @@ class SiteCrawler(BaseCrawler):
             )
     
     def parse(self, response: Response) -> Generator[Union[Request, Item], None, None]:
-        """Parse the response and yield items or new requests."""
+        """Parse the response and yield items or new requests.
+        
+        Args:
+            response (Response): The HTTP response to parse.
+            
+        Yields:
+            Union[Request, Item]: New requests to follow or items to collect.
+        """
         yield from self.parse_list(response)
         
     def parse_list(self, response: Response) -> Generator[Union[Request, Item], None, None]:
         """Parse a list page and yield article requests or items."""
         list_type = self._list_cfg.get("type", "html")
-        selector = self._list_cfg.get("selector", "")
+        selectors = self._list_cfg.get("selectors", {})
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
         
         if list_type == "json":
-            yield from self._parse_json_list(response, selector, headers, cookies)
+            yield from self._parse_json_list(response, selectors, headers, cookies)
         else:
-            yield from self._parse_html_list(response, selector, headers, cookies)
+            yield from self._parse_html_list(response, selectors, headers, cookies)
             
     def _parse_html_list(
         self, 
         response: Response, 
-        selector: str, 
+        selectors: Dict[str, Any], 
         headers: dict, 
         cookies: dict
     ) -> Generator[Union[Request, Item], None, None]:
@@ -76,9 +83,9 @@ class SiteCrawler(BaseCrawler):
         
         parser = HTMLParser(response.text)
         
-        items_selector = selector.get("items", "a")
-        link_selector = selector.get("link", "a")
-        link_attr = selector.get("link_attr", "href")
+        items_selector = selectors.get("items", "a")
+        link_selector = selectors.get("link", "a")
+        link_attr = selectors.get("link_attr", "href")
         
         for item_elem in parser.select(items_selector):
             link_elem = item_elem.select_one(link_selector) if link_selector != items_selector else item_elem
@@ -127,8 +134,14 @@ class SiteCrawler(BaseCrawler):
 
         for item_data in items:
             raw_url = item_data.get(url_field, "") if isinstance(item_data, dict) else ""
-            url = url_template.format(url=raw_url, **item_data) if isinstance(item_data, dict) else str(raw_url)
-            url = urljoin(self.base_url, url)
+            if not raw_url:
+                logger.warning(f"URL field '{url_field}' not found in item data: {item_data}")
+                continue
+            
+            if url_template:
+                url = url_template.format(url=raw_url)
+            else:
+                url = urljoin(self.base_url, raw_url) if raw_url else None
 
             if self._article_cfg:
                 yield Request(
@@ -184,9 +197,9 @@ class SiteCrawler(BaseCrawler):
                 # 簡寫: "title": "h1" => selector=h1, attr=text
                 value = parser.extract_text(field_cfg)
             elif isinstance(field_cfg, dict):
-                selector = field_cfg.get("selector", "")
+                selectors = field_cfg.get("selector", {})
                 attr = field_cfg.get("attr", "text")
-                value = parser.extract(selector, attr)
+                value = parser.extract(selectors, attr)
             else:
                 continue
 

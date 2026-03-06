@@ -1,10 +1,17 @@
 # ============================================================
-# Web Harvester Framework - 全域設定
+# Web Harvester Framework - General Configuration
 # ============================================================
 
 app:
   name: "news-crawler"
   version: "1.0.0"
+
+engine:
+  mode: "sync"                # sync | async
+  max_concurrency: 10         # Maximum number of concurrent requests
+  request_timeout: 30         # Request timeout in seconds
+  download_delay: 1.0         # Delay between requests to the same domain in seconds
+  max_retries: 3              # Maximum number of retries for failed requests
 
 # Logging configuration
 logging:
