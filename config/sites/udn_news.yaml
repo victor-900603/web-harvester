@@ -42,9 +42,11 @@ article_page:
       selector: "section.article-content__editor"
       attr: "text"
 
-    date:
+    published_at:
+      type: "datetime"
       selector: "time.article-content__time"
       attr: "text"
+      datetime_format: "%Y-%m-%d %H:%M"
 
     author:
       selector: "span.article-content__author"

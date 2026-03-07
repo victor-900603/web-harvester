@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Generator, Union, Any, Dict, Optional
 from urllib.parse import urljoin
 
@@ -170,11 +171,6 @@ class SiteCrawler(BaseCrawler):
         else:
             data = self._extract_article_html(response, selectors)
 
-        # list_data = response.meta.get("list_data", {})
-        # if isinstance(list_data, dict):
-        #     for k, v in list_data.items():
-        #         data.setdefault(k, v)
-
         data.setdefault("url", response.url)
 
         yield Item(
@@ -199,6 +195,11 @@ class SiteCrawler(BaseCrawler):
                 selectors = field_cfg.get("selector", {})
                 attr = field_cfg.get("attr", "text")
                 value = parser.extract(selectors, attr)
+                
+                field_type = field_cfg.get("type")
+                if field_type == "datetime":
+                    date_format = field_cfg.get("datetime_format")
+                    value = self._parse_date(value, date_format)
             else:
                 continue
 
@@ -220,6 +221,11 @@ class SiteCrawler(BaseCrawler):
             elif isinstance(field_cfg, dict):
                 path = field_cfg.get("path", "")
                 value = parser.extract_path(path)
+                
+                field_type = field_cfg.get("type")
+                if field_type == "datetime":
+                    date_format = field_cfg.get("datetime_format")
+                    value = self._parse_date(value, date_format)
             else:
                 continue
 
@@ -227,3 +233,21 @@ class SiteCrawler(BaseCrawler):
                 data[field_name] = value
 
         return data
+
+    def _parse_date(self, date_str: str, date_format: Optional[str]) -> Optional[datetime]:
+        """Parse a date string into a datetime object using the specified format.
+        
+        Returns a datetime object so each storage backend can serialize it
+        in its own way (ISO string for JSON, native datetime for DB).
+        """
+        if not date_str:
+            return None
+            
+        try:
+            if date_format:
+                return datetime.strptime(date_str, date_format)
+            else:
+                return datetime.fromisoformat(date_str)
+        except Exception as e:
+            logger.warning(f"Failed to parse date string '{date_str}': {e}")
+            return None

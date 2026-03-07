@@ -4,10 +4,18 @@ import logging
 import json
 import os
 from typing import Any, List, Dict
-from datetime import datetime
+from datetime import datetime, date
 
 from ..core.item import Item
 from .base import BaseStorage
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    """JSON encoder that converts datetime/date objects to ISO-8601 strings."""
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +84,7 @@ class JSONStorage(BaseStorage):
         """
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            json.dump(data, f, ensure_ascii=False, indent=4, cls=_DateTimeEncoder)
             
     @staticmethod
     def _append_to_file(filepath: str, data: Dict[str, Any]) -> None:
@@ -98,4 +106,4 @@ class JSONStorage(BaseStorage):
         existing_data.append(data)
 
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=4)
+            json.dump(existing_data, f, ensure_ascii=False, indent=4, cls=_DateTimeEncoder)

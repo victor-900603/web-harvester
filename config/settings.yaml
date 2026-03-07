@@ -25,3 +25,12 @@ logging:
 json_storage:
   enabled: true
   output_dir: "data/json"
+
+database:
+  enabled: true
+  url: "sqlite:///data/articles.db"
+  # PostgreSQL: "postgresql://user:pass@localhost:5432/news_db"
+  # MySQL: "mysql+pymysql://user:pass@localhost:3306/news_db"
+  echo: false
+  pool_size: 5
+  max_overflow: 10

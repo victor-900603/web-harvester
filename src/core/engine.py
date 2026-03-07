@@ -15,7 +15,7 @@ from .response import Response
 from .item import Item
 
 from ..crawler import BaseCrawler
-from ..storage import BaseStorage, JSONStorage
+from ..storage import BaseStorage, JSONStorage, DatabaseStorage
 from ..utils.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -207,4 +207,13 @@ def build_engine(settings: Settings) -> CrawlerEngine:
             output_dir=json_cfg.get("output_dir", "data/json"),
         ))
         
+    db_cfg = settings.get("database", {})
+    if db_cfg.get("enabled", False):
+        engine.add_storage(DatabaseStorage(
+            db_url=db_cfg.get("url", "sqlite:///data/articles.db"),
+            echo=db_cfg.get("echo", False),
+            pool_size=db_cfg.get("pool_size", 5),
+            max_overflow=db_cfg.get("max_overflow", 10),
+        ))
+
     return engine

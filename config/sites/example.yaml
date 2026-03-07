@@ -56,9 +56,11 @@ article_page:
       selector: "div.article-body"
       attr: "text"
 
-    date:
+    published_at:
+      type: "datetime"
       selector: "time.publish-date"
       attr: "datetime"
+      datetime_format: "%Y-%m-%dT%H:%M:%S"
 
     author:
       selector: "span.author-name"
@@ -76,7 +78,7 @@ article_page:
   # selectors:
   #   title: "data.title"
   #   content: "data.content"
-  #   date: "data.publish_date"
+  #   published_at: "data.publish_date"
   #   author: "data.author"
   #   category: "data.category"
   #   url: "data.url"

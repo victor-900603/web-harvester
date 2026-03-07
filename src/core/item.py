@@ -19,8 +19,8 @@ class Item:
     source: str = ""
     url: str = ""
     item_type: str = "article"
-    crawler_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    crawler_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     
     def to_dict(self) -> Dict[str, Any]:
