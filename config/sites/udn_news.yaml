@@ -35,10 +35,12 @@ article_page:
 
   selectors:
     title:
+      type: "text"
       selector: "h1.article-content__title"
       attr: "text"
 
     content:
+      type: "text"
       selector: "section.article-content__editor"
       attr: "text"
 
@@ -49,9 +51,12 @@ article_page:
       datetime_format: "%Y-%m-%d %H:%M"
 
     author:
+      type: "text"
       selector: "span.article-content__author"
       attr: "text"
+      regex: '(?P<media>.*?)／\s*(?:記者)?(?P<author>.*?)／'
 
     category:
+      type: "text"
       selector: "a.breadcrumb-items"
       attr: "text"

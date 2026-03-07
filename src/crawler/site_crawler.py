@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Generator, Union, Any, Dict, Optional
 from urllib.parse import urljoin
@@ -196,10 +197,7 @@ class SiteCrawler(BaseCrawler):
                 attr = field_cfg.get("attr", "text")
                 value = parser.extract(selectors, attr)
                 
-                field_type = field_cfg.get("type")
-                if field_type == "datetime":
-                    date_format = field_cfg.get("datetime_format")
-                    value = self._parse_date(value, date_format)
+                value = self._extract_field(value, field_cfg)
             else:
                 continue
 
@@ -222,10 +220,7 @@ class SiteCrawler(BaseCrawler):
                 path = field_cfg.get("path", "")
                 value = parser.extract_path(path)
                 
-                field_type = field_cfg.get("type")
-                if field_type == "datetime":
-                    date_format = field_cfg.get("datetime_format")
-                    value = self._parse_date(value, date_format)
+                value = self._extract_field(value, field_cfg)
             else:
                 continue
 
@@ -233,21 +228,27 @@ class SiteCrawler(BaseCrawler):
                 data[field_name] = value
 
         return data
-
-    def _parse_date(self, date_str: str, date_format: Optional[str]) -> Optional[datetime]:
-        """Parse a date string into a datetime object using the specified format.
         
-        Returns a datetime object so each storage backend can serialize it
-        in its own way (ISO string for JSON, native datetime for DB).
-        """
-        if not date_str:
-            return None
-            
+    def _extract_field(self, value: str, field_cfg: Union[str, Dict[str, Any]]) -> Any:
+        """Extract a field value based on the configuration."""
         try:
-            if date_format:
-                return datetime.strptime(date_str, date_format)
-            else:
-                return datetime.fromisoformat(date_str)
+            if isinstance(field_cfg, dict):
+                field_type = field_cfg.get("type")
+                
+                if field_type == "datetime":
+                    date_format = field_cfg.get("datetime_format")
+                    if date_format:
+                        return datetime.strptime(value, date_format)
+                    else:
+                        return datetime.fromisoformat(value)            
+                elif field_type == "text":
+                    regex = field_cfg.get("regex")
+                    if regex:
+                        match = re.search(regex, value)
+                        value = "/".join(match.groups()) if match else value
+                    return value.strip()
+                
+            return value
         except Exception as e:
-            logger.warning(f"Failed to parse date string '{date_str}': {e}")
-            return None
+            logger.warning(f"Failed to extract field with value '{value}' and config '{field_cfg}': {e}")
+            return value
