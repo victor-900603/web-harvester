@@ -178,7 +178,105 @@ class CrawlerEngine:
                 request=request,
                 encoding=response.encoding or "utf-8",
             )
+
+    async def _run_async(self, crawler: BaseCrawler) -> List[Item]:
+        items: List[Item] = []
+        queue: asyncio.Queue[Request] = asyncio.Queue()
+        seen: set = set()
+        semaphore = asyncio.Semaphore(self._max_concurrency)
+        
+        for req in crawler.start_requests():
+            await queue.put(req)
             
+        total_requests = 0
+        
+        limits = httpx.Limits(max_connections=self._max_concurrency, max_keepalive_connections=self._max_concurrency)
+        timeout = httpx.Timeout(self._request_timeout)
+        
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            limits=limits,
+        ) as client:
+            async def worker():
+                nonlocal total_requests
+                while True:
+                    request = await queue.get()  # cancelled here → no item taken, no task_done needed
+                    try:
+                        if request.url in seen:
+                            continue 
+                        
+                        seen.add(request.url)
+                        response = await self._process_async(client, request)
+                        
+                        if response is None:
+                            continue
+                        
+                        total_requests += 1
+                        
+                        callback_name = request.callback or "parse"
+                        callback = getattr(crawler, callback_name, None)
+                        if callback is None:
+                            logger.warning(f"No callback method '{callback_name}' found in crawler '{crawler.name}'")
+                            continue
+                        
+                        for result in callback(response):
+                            if isinstance(result, Request):
+                                await queue.put(result)
+                            elif isinstance(result, Item):
+                                items.append(result)
+                                await self._store_async(result)
+                            else:
+                                logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
+                                
+                        if self._download_delay > 0:
+                            await asyncio.sleep(self._download_delay)
+                        
+                    finally:
+                        queue.task_done()
+                        
+            workers = [asyncio.create_task(worker()) for _ in range(self._max_concurrency)]
+            await queue.join()
+            for w in workers:
+                w.cancel()
+
+        logger.info(f"Successfully processed {total_requests} requests.")
+        logger.info(f"Total requests made: {total_requests}")
+        logger.info(f"Total items collected: {len(items)}")
+        return items
+    
+    async def _process_async(self, client: httpx.AsyncClient, request: Request) -> Optional[Response]:
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                return await self._fetch_async(client, request)
+            except Exception as e:
+                last_exception = e
+                logger.warning(f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}")
+                await asyncio.sleep(min(2 ** attempt, 10))
+        
+        logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
+        return None
+    
+    async def _fetch_async(self, client: httpx.AsyncClient, request: Request) -> Optional[Response]:
+        response = await client.request(
+            method=request.method,
+            url=request.url,
+            headers=request.headers or None,
+            cookies=request.cookies or None,
+            params=request.params or None,
+            data=request.body,
+            json=request.json_body,
+        )
+        
+        return Response(
+            url=request.url,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            cookies=dict(response.cookies),
+            text=response.text,
+            request=request,
+            encoding=response.encoding or "utf-8",
+        )
+  
     def _store(self, item: Item) -> None:
         """Save an item using all configured storage backends."""
         for storage in self.storages:
@@ -186,6 +284,12 @@ class CrawlerEngine:
                 storage.save(item)
             except Exception as e:
                 logger.error(f"Failed to save item with {storage.__class__.__name__}: {e}")
+
+    async def _store_async(self, item: Item) -> None:
+        """Save an item asynchronously by running the synchronous _store in a thread pool,
+        so the event loop is not blocked by I/O-bound storage operations."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._store, item)
             
     def close(self) -> None:
         """Close any resources used by the engine, such as storage backends."""
