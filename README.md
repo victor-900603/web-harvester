@@ -133,7 +133,8 @@ request:
 
 list_page:
   url: "https://example.com/news?page={page}"
-  type: "html"           # html | json
+  method: "GET"            # GET | POST，列表請求方法（預設 GET）
+  type: "html"             # html | json
   selectors:
     items: "article.news-item"
     link: "a"
