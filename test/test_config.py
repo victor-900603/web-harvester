@@ -114,6 +114,34 @@ class TestValidateConfig:
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
         assert "base_url" in str(exc_info.value)
 
+    def test_html_field_missing_selector_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "article_page": {
+                "type": "html",
+                "selectors": {
+                    "title": {"type": "text", "path": "data.title"},
+                },
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_json_field_missing_path_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "article_page": {
+                "type": "json",
+                "selectors": {
+                    "title": {"type": "text", "selector": "h1.title"},
+                },
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
 
 class TestLoadSiteConfig:
     def test_loads_example_site(self):

@@ -126,7 +126,59 @@
           }
         }
       },
-      "required": ["type"]
+      "required": ["type"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "html"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selectors": {
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/$defs/html_field_config"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "json"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selectors": {
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/$defs/json_field_config"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "required": ["name", "base_url"],
@@ -206,6 +258,58 @@
           "description": "Regular expression applied to the extracted value."
         }
       }
+    },
+    "html_field_config": {
+      "description": "Field config for HTML article pages. Requires a CSS selector.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text", "datetime", "attr"]
+        },
+        "selector": {
+          "type": "string",
+          "description": "CSS selector (HTML article pages)."
+        },
+        "attr": {
+          "type": "string",
+          "description": "Attribute to extract. Defaults to 'text'."
+        },
+        "datetime_format": {
+          "type": "string",
+          "description": "strptime format used when type is 'datetime'."
+        },
+        "regex": {
+          "type": "string",
+          "description": "Regular expression applied to the extracted value."
+        }
+      },
+      "required": ["selector"]
+    },
+    "json_field_config": {
+      "description": "Field config for JSON article pages. Requires a JSON path.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text", "datetime", "attr"]
+        },
+        "path": {
+          "type": "string",
+          "description": "JSON path (JSON article pages)."
+        },
+        "datetime_format": {
+          "type": "string",
+          "description": "strptime format used when type is 'datetime'."
+        },
+        "regex": {
+          "type": "string",
+          "description": "Regular expression applied to the extracted value."
+        }
+      },
+      "required": ["path"]
     }
   }
 }

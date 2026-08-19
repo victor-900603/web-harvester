@@ -214,9 +214,12 @@ class SiteCrawler(BaseCrawler):
             if isinstance(field_cfg, str):
                 value = parser.extract_text(field_cfg)
             elif isinstance(field_cfg, dict):
-                selectors = field_cfg.get("selector", {})
+                selector = field_cfg.get("selector", "")
+                if not selector:
+                    logger.warning(f"Field '{field_name}' is missing a selector, skipping.")
+                    continue
                 attr = field_cfg.get("attr", "text")
-                value = parser.extract(selectors, attr)
+                value = parser.extract(selector, attr)
                 
                 value = self._extract_field(value, field_cfg)
             else:
