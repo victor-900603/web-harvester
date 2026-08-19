@@ -74,6 +74,10 @@ class SiteCrawler(BaseCrawler):
         
     def parse_list(self, response: Response) -> Generator[Union[Request, Item], None, None]:
         """Parse a list page and yield article requests or items."""
+        if not response.ok:
+            logger.warning(f"List page returned non-OK status {response.status_code}: {response.url}")
+            return
+
         list_type = self._list_cfg.get("type", "html")
         selectors = self._list_cfg.get("selectors", {})
         headers = self._request_cfg.get("headers", {})
@@ -174,6 +178,10 @@ class SiteCrawler(BaseCrawler):
         self, response: Response
     ) -> Generator[Union[Item, Request], None, None]:
         """Parse an article page and yield an item with the extracted data."""
+        if not response.ok:
+            logger.warning(f"Article page returned non-OK status {response.status_code}: {response.url}")
+            return
+
         article_type = self._article_cfg.get("type", "html")
         selectors = self._article_cfg.get("selectors", {})
 

@@ -76,6 +76,7 @@ python -m pytest test
 - HTML / JSON 解析器
 - SiteCrawler 分頁、列表與文章解析
 - 引擎 sync / async 模式的 `max_items` / `stop_on_duplicate` / `timeout` 限制
+- 非 2xx HTTP 回應觸發重試、失敗後不解析
 - JSON 與資料庫儲存後端
 
 ## 快速開始

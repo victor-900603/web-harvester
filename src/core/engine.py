@@ -205,7 +205,8 @@ class CrawlerEngine:
                 json=request.json_body,
                 timeout=self._request_timeout,
             )
-            
+            response.raise_for_status()
+
             return Response(
                 url=request.url,
                 status_code=response.status_code,
@@ -338,7 +339,8 @@ class CrawlerEngine:
             data=request.body,
             json=request.json_body,
         )
-        
+        response.raise_for_status()
+
         return Response(
             url=request.url,
             status_code=response.status_code,
