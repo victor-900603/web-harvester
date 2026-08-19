@@ -20,6 +20,7 @@ web-harvester/
 ├── requirements.txt
 ├── config/
 │   ├── settings.yaml       # 全域設定（引擎、日誌、儲存）
+│   ├── category_normalization.yaml  # 跨站分類統一對應表（Settings 自動合併）
 │   ├── schema/             # 設定檔驗證 JSON Schema
 │   │   ├── settings.schema.json
 │   │   └── site.schema.json
@@ -114,6 +115,7 @@ python main.py --site your_site
 | `engine.max_retries` | 失敗請求最大重試次數 | `3` |
 | `request.user_agent` | 全域請求的 User-Agent | `web-harvester/1.0` |
 | `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
+| `category_normalization` | 跨站分類統一對應表（原始名 → 統一值，定義於 `config/category_normalization.yaml`） | `{}` |
 | `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
 | `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
 | `database.enabled` | 是否啟用資料庫儲存 | `true` |
@@ -205,12 +207,84 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 | `author` | String | 作者 |
 | `published_at` | DateTime | 發布時間 |
 | `content` | Text | 文章內容 |
-| `category` | String | 分類 |
-| `tags` | String | 標籤（逗號分隔） |
+| `category` | Text | 分類（JSON 陣列） |
+| `normalized_category` | Text | 統一後分類（JSON 陣列，跨站比對用） |
+| `tags` | Text | 標籤（JSON 陣列） |
 | `crawler_at` | DateTime | 爬取時間（UTC） |
 | `extra_data` | Text | 額外資料（JSON 格式） |
 
 去重機制：寫入前先以 `url` 查詢是否已存在（`data.url` 優先於 `item.url`），存在則跳過；`url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
+
+## 分類機制
+
+每個站點可透過頂層 `category` 與 `tags` 區塊設定自動分類與標籤，兩者皆為選用。
+
+### category（多值分類）
+
+`sources` 的所有命中值**累加**成分類陣列（自動去重），可同時有多個分類（如科技、財經）；全部失敗時使用 `default`：
+
+```yaml
+category:
+  sources:
+    - type: "meta"                   # <meta name="section" content="股市">
+      name: "section"
+    - type: "url"                    # 從網址擷取（regex 第一個 group）
+      regex: "/story/(\\d+)/"
+      mapping:                       # 可選：值 → 顯示名
+        "7251": "股市"
+    - type: "selector"               # CSS selector（attr 預設 text；join 串接多匹配）
+      selector: "a.breadcrumb-item"
+      attr: "text"
+      join: ">"
+    - type: "keyword"                # 比對標題/內容，命中任一關鍵字即用該值
+      rules:
+        - keywords: ["台股", "股市"]
+          value: "財經"
+  default: "其他"
+```
+
+### category_normalization（跨站分類統一）
+
+各站對同一主題可能用不同分類名（如「股市」與「金融」其實同屬財經）。在 `config/category_normalization.yaml` 設定全域對應表（`Settings` 載入 `settings.yaml` 時自動合併，兩處同時存在時以 `settings.yaml` 內的值優先），比對結果會同時存入 `normalized_category`，供跨站篩選使用：
+
+```yaml
+# config/category_normalization.yaml
+"股市": "財經"
+"金融": "財經"
+"資通訊": "科技"
+```
+
+`category` 保留各站原始分類名，`normalized_category` 存放對應後的統一值；無對應時保留原值。
+
+### tags（多值標籤）
+
+全部來源的值累加成標籤陣列（自動去重）；`split` 可把單一字串拆成多個：
+
+```yaml
+tags:
+  sources:
+    - type: "meta"
+      name: "news_keywords"
+      split: ","
+    - type: "keyword"
+      rules:
+        - keywords: ["台股"]
+          value: "台股"
+```
+
+### 支援的來源類型
+
+| type | 說明 |
+|------|------|
+| `url` | 從文章網址用 `regex` 擷取（第一個 group）；可選 `mapping` |
+| `meta` | 讀取 `<meta>` 標籤的 `content`，用 `name` 或 `property` 指定 |
+| `selector` | CSS selector 萃取（`attr` 預設 text；`join` 可串接多匹配） |
+| `json_ld` | 解析第一個 `script[type="application/ld+json"]`，以 `path` 取值 |
+| `list_data` | 從列表頁 JSON item（request meta 的 `list_data`）以 `path` 取值 |
+| `article_json` | 從文章 JSON 回應以 `path` 取值 |
+| `keyword` | 比對標題與內容的關鍵字規則，命中任一即回傳該 `value` |
+
+每個來源都可選配 `mapping`（原始值 → 顯示名）。`category` 與 `tags` 皆為多值累加並自動去重，`category` 支援 `default` 兜底值；兩者皆支援 meta 來源的 `split` 分隔符。
 
 ## 新增網站
 

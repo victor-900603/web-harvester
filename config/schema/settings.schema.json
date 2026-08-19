@@ -59,6 +59,13 @@
         }
       }
     },
+    "category_normalization": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "logging": {
       "type": "object",
       "additionalProperties": false,

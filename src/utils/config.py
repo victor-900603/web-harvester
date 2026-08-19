@@ -13,6 +13,7 @@ DEFAULT_CONFIG_PATH = os.path.join("config", "settings.yaml")
 DEFAULT_SITE_CONFIG_DIR = os.path.join("config", "sites")
 DEFAULT_SETTINGS_SCHEMA = os.path.join("config", "schema", "settings.schema.json")
 DEFAULT_SITE_SCHEMA = os.path.join("config", "schema", "site.schema.json")
+DEFAULT_CATEGORY_NORMALIZATION_PATH = os.path.join("config", "category_normalization.yaml")
 
 
 class ConfigValidationError(ValueError):
@@ -60,6 +61,7 @@ class Settings:
         with open(self.config_path, "r", encoding="utf-8") as f:
             try:
                 self._data = yaml.safe_load(f) or {}
+                self._merge_category_normalization()
                 validate_config(self._data, DEFAULT_SETTINGS_SCHEMA, self.config_path)
                 logger.info(f"Config loaded from {self.config_path}")
 
@@ -67,7 +69,28 @@ class Settings:
                 logger.error(f"Error parsing config file {self.config_path}: {e}")
                 self._data = {}
                 raise ConfigValidationError(f"Error parsing config file {self.config_path}: {e}") from e
-                
+
+    def _merge_category_normalization(self) -> None:
+        """Merge the category normalization table from its dedicated file."""
+        if not os.path.exists(DEFAULT_CATEGORY_NORMALIZATION_PATH):
+            return
+
+        with open(DEFAULT_CATEGORY_NORMALIZATION_PATH, "r", encoding="utf-8") as f:
+            try:
+                extra = yaml.safe_load(f) or {}
+            except yaml.YAMLError as e:
+                raise ConfigValidationError(
+                    f"Error parsing category normalization file {DEFAULT_CATEGORY_NORMALIZATION_PATH}: {e}"
+                ) from e
+
+        if not isinstance(extra, dict):
+            raise ConfigValidationError(
+                f"Category normalization file {DEFAULT_CATEGORY_NORMALIZATION_PATH} must be a mapping."
+            )
+
+        current = self._data.get("category_normalization") or {}
+        self._data["category_normalization"] = {**extra, **current}
+
                 
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         """Get a configuration value by key.

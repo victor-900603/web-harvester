@@ -73,12 +73,12 @@ class TestMain:
         monkeypatch.setattr(main, "Settings", fake_settings)
         monkeypatch.setattr(main, "setup_logging", fake_setup)
         monkeypatch.setattr(main, "build_engine", FakeEngine)
-        monkeypatch.setattr(main, "SiteCrawler", lambda cfg: ("crawler", cfg))
+        monkeypatch.setattr(main, "SiteCrawler", lambda cfg, **kw: ("crawler", cfg, kw))
 
         code = main.main(["--site", "example"])
         assert code == 0
         assert captured["site_id"] == "example"
-        assert captured["crawler"] == ("crawler", {"name": "example"})
+        assert captured["crawler"] == ("crawler", {"name": "example"}, {"category_normalization": None})
 
     def test_unknown_site_errors(self, monkeypatch, capsys):
         def fake_load(site_id):

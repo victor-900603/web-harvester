@@ -63,7 +63,10 @@ def main(argv: list | None = None) -> int:
     )
 
     engine = build_engine(settings)
-    crawler = SiteCrawler(site_config)
+    crawler = SiteCrawler(
+        site_config,
+        category_normalization=settings.get("category_normalization"),
+    )
     engine.run(crawler)
     return 0
 
