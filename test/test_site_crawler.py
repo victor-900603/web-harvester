@@ -39,6 +39,18 @@ class TestStartRequests:
         req = next(crawler.start_requests())
         assert req.headers == {"Referer": "https://example.com"}
 
+    def test_list_method_defaults_to_get(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        req = next(crawler.start_requests())
+        assert req.method == "GET"
+
+    def test_list_method_post_from_config(self, sample_site_config):
+        sample_site_config["list_page"]["method"] = "POST"
+        crawler = SiteCrawler(sample_site_config)
+        reqs = list(crawler.start_requests())
+        assert len(reqs) == 2
+        assert all(r.method == "POST" for r in reqs)
+
     def test_limits_property(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
         assert crawler.limits["max_pages"] == 2

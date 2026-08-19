@@ -32,7 +32,8 @@ class SiteCrawler(BaseCrawler):
         """Generate initial requests to start crawling the site."""
         list_url = self._list_cfg.get("url", self.base_url)
         pagination = self._list_cfg.get("pagination", {})
-        
+        method = self._list_cfg.get("method", "GET")
+
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
         
@@ -48,6 +49,7 @@ class SiteCrawler(BaseCrawler):
                 url = list_url.format(page=page_num)
                 yield Request(
                     url=url, 
+                    method=method,
                     headers=headers, 
                     cookies=cookies, 
                     callback="parse_list",
@@ -56,6 +58,7 @@ class SiteCrawler(BaseCrawler):
         else:
             yield Request(
                 url=list_url, 
+                method=method,
                 headers=headers, 
                 cookies=cookies, 
                 callback="parse_list", 
