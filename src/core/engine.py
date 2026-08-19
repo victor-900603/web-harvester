@@ -213,6 +213,7 @@ class CrawlerEngine:
                 headers=dict(response.headers),
                 cookies=dict(response.cookies),
                 text=response.text,
+                body=response.content,
                 request=request,
                 encoding=response.encoding or "utf-8",
             )
@@ -347,6 +348,7 @@ class CrawlerEngine:
             headers=dict(response.headers),
             cookies=dict(response.cookies),
             text=response.text,
+            body=response.content,
             request=request,
             encoding=response.encoding or "utf-8",
         )
