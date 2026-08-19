@@ -198,3 +198,67 @@ class TestDatabaseStorage:
             session.close()
             storage.close()
             close_database()
+
+    def test_tags_list_serialized_to_json_string(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        storage.save(make_item(url="https://example.com/1", tags=["台股", "科技股"]))
+
+        session = get_session()
+        try:
+            article = session.query(Article).one()
+            assert article.tags == json_lib.dumps(["台股", "科技股"], ensure_ascii=False)
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_tags_string_passed_through(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        storage.save(make_item(url="https://example.com/1", tags="single"))
+
+        session = get_session()
+        try:
+            article = session.query(Article).one()
+            assert article.tags == "single"
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_category_and_normalized_serialized(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        storage.save(
+            make_item(
+                url="https://example.com/1",
+                category=["股市", "科技"],
+                normalized_category=["財經", "科技"],
+            )
+        )
+
+        session = get_session()
+        try:
+            article = session.query(Article).one()
+            assert article.category == json_lib.dumps(["股市", "科技"], ensure_ascii=False)
+            assert article.normalized_category == json_lib.dumps(["財經", "科技"], ensure_ascii=False)
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_category_string_passed_through(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        storage.save(make_item(url="https://example.com/1", category="single"))
+
+        session = get_session()
+        try:
+            article = session.query(Article).one()
+            assert article.category == "single"
+            assert article.normalized_category is None
+        finally:
+            session.close()
+            storage.close()
+            close_database()
