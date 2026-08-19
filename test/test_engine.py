@@ -116,6 +116,37 @@ class TestSyncLimits:
         assert items == []
         assert len(calls) == 3
 
+    def test_fetch_sync_sets_body_for_json(self, monkeypatch):
+        class FakeResponse:
+            status_code = 200
+            encoding = "utf-8"
+            content = b'{"ok": true}'
+            text = '{"ok": true}'
+            headers = {}
+            cookies = {}
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def request(self, *args, **kwargs):
+                return FakeResponse()
+
+        monkeypatch.setattr(httpx, "Client", FakeClient)
+        engine = make_engine("sync")
+        resp = engine._fetch_sync(Request(url="https://e.com/a"))
+        assert resp is not None
+        assert resp.json() == {"ok": True}
+
 
 class TestAsyncLimits:
     def test_max_items_stops_collection(self, monkeypatch):
