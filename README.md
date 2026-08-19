@@ -34,8 +34,15 @@ web-harvester/
 │   └── utils/              # 工具函式（設定載入、日誌）
 ├── data/
 │   └── json/               # JSON 輸出目錄
-└── test/
-    └── test.py
+└── test/                   # 單元測試（pytest）
+    ├── conftest.py
+    ├── test_config.py
+    ├── test_core.py
+    ├── test_engine.py
+    ├── test_logging.py
+    ├── test_parsers.py
+    ├── test_site_crawler.py
+    └── test_storage.py
 ```
 
 ## 安裝
@@ -53,6 +60,23 @@ source .venv/bin/activate   # macOS / Linux
 ```bash
 pip install -r requirements.txt
 ```
+
+## 測試
+
+使用 pytest（需在專案根目錄執行，路徑皆為相對根目錄）：
+
+```bash
+python -m pytest test
+```
+
+單元測試不連真實網路：engine 測試透過 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 模擬回應；storage 測試使用 pytest 的 `tmp_path` 臨時目錄。涵蓋範圍：
+
+- 設定載入與 JSON Schema 驗證（正反向）
+- Request / Response / Item 資料結構
+- HTML / JSON 解析器
+- SiteCrawler 分頁、列表與文章解析
+- 引擎 sync / async 模式的 `max_items` / `stop_on_duplicate` / `timeout` 限制
+- JSON 與資料庫儲存後端
 
 ## 快速開始
 
