@@ -56,7 +56,20 @@ article_page:
       attr: "text"
       regex: '(?P<media>.*?)／\s*(?:記者)?(?P<author>.*?)／'
 
-    category:
-      type: "text"
-      selector: "a.breadcrumb-items"
-      attr: "text"
+category:
+  sources:
+    - type: "meta"
+      name: "section"
+
+    - type: "meta"
+      property: "article:section"
+
+    - type: "json_ld"
+      path: "itemListElement.1.name"
+  default: "其他"
+
+tags:
+  sources:
+    - type: "meta"
+      name: "news_keywords"
+      split: ","

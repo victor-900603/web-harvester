@@ -197,3 +197,67 @@ class TestParseArticle:
             "url": "https://example.com/news/1",
             "content": "Title",
         }
+
+    def test_article_category_from_meta(self, sample_site_config):
+        sample_site_config["category"] = {
+            "sources": [{"type": "meta", "name": "section"}],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<meta name='section' content='股市'>"
+            "<h1 class='article-title'>Title</h1>",
+        )
+        item = next(crawler.parse_article(resp))
+        assert item.data["category"] == ["股市"]
+
+    def test_article_category_default_fallback(self, sample_site_config):
+        sample_site_config["category"] = {
+            "sources": [{"type": "meta", "name": "section"}],
+            "default": "其他",
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<h1 class='article-title'>Title</h1>",
+        )
+        item = next(crawler.parse_article(resp))
+        assert item.data["category"] == ["其他"]
+
+    def test_article_tags_from_meta_split(self, sample_site_config):
+        sample_site_config["tags"] = {
+            "sources": [{"type": "meta", "name": "news_keywords", "split": ","}],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<meta name='news_keywords' content='台股,科技股'>"
+            "<h1 class='article-title'>Title</h1>",
+        )
+        item = next(crawler.parse_article(resp))
+        assert item.data["tags"] == ["台股", "科技股"]
+
+    def test_article_classification_list_data_source(self, sample_site_config):
+        sample_site_config["category"] = {
+            "sources": [{"type": "list_data", "path": "cate_id"}],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        request = Request(
+            url="https://example.com/news/1",
+            callback="parse_article",
+            meta={"list_data": {"cate_id": "7251"}},
+        )
+        resp = make_response("https://example.com/news/1", "<h1 class='article-title'>Title</h1>")
+        resp.request = request
+        item = next(crawler.parse_article(resp))
+        assert item.data["category"] == ["7251"]
+
+    def test_article_no_classification_config(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<h1 class='article-title'>Title</h1>",
+        )
+        item = next(crawler.parse_article(resp))
+        assert "category" not in item.data
+        assert "tags" not in item.data

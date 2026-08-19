@@ -68,11 +68,6 @@ article_page:
       selector: "span.author-name"
       attr: "text"
 
-    category:
-      type: "text"
-      selector: "span.category"
-      attr: "text"
-
     url:
       type: "text"
       selector: "link[rel='canonical']"
@@ -84,5 +79,34 @@ article_page:
   #   content: "data.content"
   #   published_at: "data.publish_date"
   #   author: "data.author"
-  #   category: "data.category"
   #   url: "data.url"
+
+# Optional article classification. Sources are tried in order; the first one
+# yielding a non-empty value wins, otherwise `default` is used.
+# category:
+#   sources:
+#     - type: "meta"
+#       name: "section"
+#
+#     - type: "selector"
+#       selector: "a.breadcrumb-item"
+#       attr: "text"
+#       join: ">"
+#
+#     - type: "url"
+#       regex: "/story/(\\d+)/"
+#       mapping:
+#         "7251": "股市"
+#
+#     - type: "keyword"
+#       rules:
+#         - keywords: ["台股", "股市"]
+#           value: "財經"
+#   default: "其他"
+#
+# Optional auto-tagging. Values from all sources are accumulated.
+# tags:
+#   sources:
+#     - type: "meta"
+#       name: "news_keywords"
+#       split: ","

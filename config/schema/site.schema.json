@@ -44,6 +44,42 @@
         }
       }
     },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/classifier_source"
+          },
+          "description": "Ordered list of classification sources. The first source that yields a non-empty value wins."
+        },
+        "default": {
+          "type": "string",
+          "description": "Fallback category used when no source yields a value."
+        }
+      },
+      "required": ["sources"],
+      "description": "Optional article classification into a single category."
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/classifier_source"
+          },
+          "description": "List of classification sources whose values are accumulated into the article tags."
+        }
+      },
+      "required": ["sources"],
+      "description": "Optional auto-tagging configuration producing a list of tags."
+    },
     "request": {
       "type": "object",
       "additionalProperties": false,
@@ -227,6 +263,186 @@
           "required": ["items", "url_field"]
         }
       ]
+    },
+    "classifier_source": {
+      "description": "A single classification source. The 'type' field selects the extraction strategy; 'mapping' optionally translates raw values into display names.",
+      "oneOf": [
+        {
+          "title": "URL source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "url"
+            },
+            "regex": {
+              "type": "string",
+              "description": "Regular expression matched against the article URL. The first capture group is used as the raw value."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "regex"]
+        },
+        {
+          "title": "Meta source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "meta"
+            },
+            "name": {
+              "type": "string",
+              "description": "Value of the meta name attribute, e.g. 'section'."
+            },
+            "property": {
+              "type": "string",
+              "description": "Value of the meta property attribute, e.g. 'article:section'."
+            },
+            "split": {
+              "type": "string",
+              "description": "Delimiter used to split the meta content into multiple tags (tags only)."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type"],
+          "anyOf": [
+            {
+              "required": ["name"]
+            },
+            {
+              "required": ["property"]
+            }
+          ]
+        },
+        {
+          "title": "Selector source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "selector"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector targeting an element in the article HTML."
+            },
+            "attr": {
+              "type": "string",
+              "description": "Attribute to extract. Defaults to 'text'."
+            },
+            "join": {
+              "type": "string",
+              "description": "Delimiter used to join multiple matched values (category only); omitting it takes the first match."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "selector"]
+        },
+        {
+          "title": "JSON-LD source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "json_ld"
+            },
+            "path": {
+              "type": "string",
+              "description": "Dot-separated JSON path into the first JSON-LD block, e.g. 'itemListElement.1.name'."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "title": "List data source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "list_data"
+            },
+            "path": {
+              "type": "string",
+              "description": "Dot-separated JSON path into the list item data carried in request meta."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "title": "Article JSON source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "article_json"
+            },
+            "path": {
+              "type": "string",
+              "description": "Dot-separated JSON path into the article JSON response body."
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "title": "Keyword source",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "keyword"
+            },
+            "rules": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "keywords": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "Category or tag value assigned when any keyword matches the article title or content."
+                  }
+                },
+                "required": ["keywords", "value"]
+              }
+            },
+            "mapping": {
+              "$ref": "#/$defs/classifier_mapping"
+            }
+          },
+          "required": ["type", "rules"]
+        }
+      ]
+    },
+    "classifier_mapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Maps raw extracted values to display names, e.g. {'7251': '股市'}."
     },
     "field_config": {
       "description": "Configuration object for a single extracted field.",
