@@ -3,10 +3,14 @@ from __future__ import annotations
 import json as json_lib
 from datetime import datetime, timezone
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from src.storage.json_storage import JSONStorage
 from src.storage.db_storage import DatabaseStorage
 from src.storage.database import get_session, close_database
 from src.storage.models import Article
+from src.core import Item
 from conftest import make_item
 
 
@@ -133,6 +137,59 @@ class TestDatabaseStorage:
                 make_item(url="https://example.com/2"),
             ]
         )
+
+        session = get_session()
+        try:
+            assert session.query(Article).count() == 2
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_dedup_uses_data_url_not_item_url(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        item = Item(data={"url": "https://example.com/data"}, source="example", url="https://example.com/item")
+        storage.save(item)
+        storage.save(item)
+
+        session = get_session()
+        try:
+            assert session.query(Article).count() == 1
+            assert session.query(Article).one().url == "https://example.com/data"
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_integrity_error_skipped_not_raised(self, tmp_path, monkeypatch):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+
+        def racing_store(self, item, session):
+            session.add(Article(source=item.source, url=item.url, title="", content="", item_type=item.item_type))
+
+        monkeypatch.setattr(DatabaseStorage, "_store", racing_store)
+        storage.save(make_item(url="https://example.com/1"))
+        storage.save(make_item(url="https://example.com/1"))
+
+        session = get_session()
+        try:
+            assert session.query(Article).count() == 1
+        finally:
+            session.close()
+            storage.close()
+            close_database()
+
+    def test_save_many_falls_back_on_duplicate(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        items = [
+            make_item(url="https://example.com/1"),
+            make_item(url="https://example.com/2"),
+            make_item(url="https://example.com/1"),
+        ]
+        storage.save_many(items)
 
         session = get_session()
         try:

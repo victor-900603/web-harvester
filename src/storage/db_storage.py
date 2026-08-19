@@ -4,6 +4,8 @@ import json
 import logging
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
+
 from ..core.item import Item
 from .base import BaseStorage
 from .database import get_session, init_database, close_database, Session as DBSession
@@ -35,6 +37,9 @@ class DatabaseStorage(BaseStorage):
             
             session.commit()
             logger.debug(f"Saved item to database: {item.data.get('title', item.url)}")
+        except IntegrityError:
+            session.rollback()
+            logger.warning(f"Item URL already exists in database, skipped: {item.url}")
         except Exception as e:
             session.rollback()
             logger.error(f"Failed to save item to database: {e}")
@@ -51,6 +56,11 @@ class DatabaseStorage(BaseStorage):
             
             session.commit()
             logger.debug(f"Saved {len(items)} items to database.")
+        except IntegrityError:
+            session.rollback()
+            logger.warning("Batch save hit duplicate URLs, falling back to per-item saves.")
+            for item in items:
+                self.save(item)
         except Exception as e:
             session.rollback()
             logger.error(f"Failed to save items to database: {e}")
@@ -72,7 +82,7 @@ class DatabaseStorage(BaseStorage):
         
         article = Article(
             source=item.source,
-            url=item.url,
+            url=url,
             
             title=data.get("title", ""),
             author=data.get("author"),
