@@ -4,19 +4,19 @@
 
 ## 開發指令
 
-- 執行：`python run.py`（在專案根目錄執行；路徑皆為相對根目錄）
+- 執行：`python main.py --site <site_id>`（在專案根目錄執行；路徑皆為相對根目錄）；`python main.py --list-sites` 列出可用站點
 - venv：`.venv`（Python 3.11），啟動：`.venv\Scripts\Activate.ps1`
 - 測試：`python -m pytest test`（pytest 於 requirements.txt）；engine 測試用 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 跳過真實網路，storage 測試用 pytest `tmp_path`
-- 無 lint / formatter / typecheck 設定，改完直接跑測試 + `python run.py`
+- 無 lint / formatter / typecheck 設定，改完直接跑測試 + `python main.py --site <site_id>`
 
 ## 架構與執行流程
 
 ```
-run.py → Settings (config/settings.yaml) → setup_logging
-       → load_site_config("udn_news") → build_engine(settings) → SiteCrawler(site_config) → engine.run(crawler)
+main.py → Settings (config/settings.yaml) → setup_logging
+        → load_site_config(--site 指定的站點) → build_engine(settings) → SiteCrawler(site_config) → engine.run(crawler)
 ```
 
-- 換目標網站：改 `run.py` 的 `load_site_config(...)` 參數（site yaml 檔名不含副檔名），在 `config/sites/<name>.yaml` 新增對應設定
+- 換目標網站：`python main.py --site <site_id>`（site yaml 檔名不含副檔名），在 `config/sites/<name>.yaml` 新增對應設定
 - `engine.mode`（`sync`/`async`）由 `config/settings.yaml` 控制；async 用 `asyncio` + `httpx.AsyncClient`，sync 用 `httpx.Client`
 - 全域 `request` 區塊的 `user_agent` / `verify_ssl` 自動套用到所有請求；site 層級 `request.headers/cookies` 僅套用到該站
 - 儲存後端由 `build_engine`（engine.py:376）依 settings 掛載：JSON（batch 模式，close 時才寫檔，檔名 `{source}_{date}.json`）+ SQLAlchemy（預設 SQLite）
