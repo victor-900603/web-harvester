@@ -102,6 +102,8 @@ class JSONStorage(BaseStorage):
                     existing_data = json.load(f)
                 except json.JSONDecodeError:
                     existing_data = []
+        else:
+            existing_data = []
 
         existing_data.append(data)
 

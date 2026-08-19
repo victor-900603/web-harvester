@@ -3,9 +3,6 @@ from __future__ import annotations
 import json as json_lib
 from datetime import datetime, timezone
 
-import pytest
-
-from src.core import Item
 from src.storage.json_storage import JSONStorage
 from src.storage.db_storage import DatabaseStorage
 from src.storage.database import get_session, close_database
@@ -58,11 +55,27 @@ class TestJSONStorage:
         data = json_lib.loads(next(tmp_path.iterdir()).read_text(encoding="utf-8"))
         assert data[0]["crawler_at"] == "2026-08-19T10:00:00+00:00"
 
-    @pytest.mark.xfail(reason="既有 bug: _append_to_file 在檔案不存在時 reference before assignment", strict=True)
-    def test_non_batch_mode_first_save(self, tmp_path):
+    def test_non_batch_mode_first_save_creates_file(self, tmp_path):
         storage = JSONStorage(output_dir=str(tmp_path), batch_mode=False)
         storage.save(make_item(url="https://example.com/1"))
         storage.close()
+
+        files = list(tmp_path.iterdir())
+        assert len(files) == 1
+        data = json_lib.loads(files[0].read_text(encoding="utf-8"))
+        assert len(data) == 1
+        assert data[0]["url"] == "https://example.com/1"
+
+    def test_non_batch_mode_appends_to_existing(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=False)
+        storage.save(make_item(url="https://example.com/1"))
+        storage.save(make_item(url="https://example.com/2"))
+        storage.close()
+
+        files = list(tmp_path.iterdir())
+        assert len(files) == 1
+        data = json_lib.loads(files[0].read_text(encoding="utf-8"))
+        assert len(data) == 2
 
 
 class TestDatabaseStorage:

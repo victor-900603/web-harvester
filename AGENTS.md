@@ -33,7 +33,6 @@ run.py → Settings (config/settings.yaml) → setup_logging
 
 ## 已知陷阱
 
-- `JSONStorage._append_to_file`（json_storage.py:90）在檔案不存在且 `batch_mode=False` 時有既有 `NameError` bug；預設 `batch_mode=True` 不受影響
 - udn 站的文章 selectors 部分回傳 None（site 設定與實際頁面結構不符，既有問題）
 - `data/`、`logs/`、`.venv/` 已在 .gitignore
 
