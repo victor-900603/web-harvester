@@ -25,7 +25,7 @@ class DatabaseStorage(BaseStorage):
         init_database(db_url, echo=echo, **kwargs)
         self._known_fields = {
             "title", "content", "author", "published_at",
-            "category", "tags", "url",
+            "category", "normalized_category", "tags", "url",
         }
         
     def save(self, item: Item) -> None:
@@ -80,6 +80,18 @@ class DatabaseStorage(BaseStorage):
             
         extra_data = {k: v for k, v in data.items() if k not in self._known_fields}
         
+        tags = data.get("tags")
+        if isinstance(tags, (list, tuple)):
+            tags = json.dumps(list(tags), ensure_ascii=False)
+
+        category = data.get("category")
+        if isinstance(category, (list, tuple)):
+            category = json.dumps(list(category), ensure_ascii=False)
+
+        normalized_category = data.get("normalized_category")
+        if isinstance(normalized_category, (list, tuple)):
+            normalized_category = json.dumps(list(normalized_category), ensure_ascii=False)
+
         article = Article(
             source=item.source,
             url=url,
@@ -88,8 +100,9 @@ class DatabaseStorage(BaseStorage):
             author=data.get("author"),
             published_at=data.get("published_at"),
             content=data.get("content", ""),
-            category=data.get("category"),
-            tags=data.get("tags"),
+            category=category,
+            normalized_category=normalized_category,
+            tags=tags,
             item_type=item.item_type,
             extra_data=json.dumps(extra_data) if extra_data else None,
         )

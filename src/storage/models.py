@@ -21,8 +21,9 @@ class Article(Base):
     author = Column(String(255), comment="The author of the article")
     published_at = Column(DateTime, comment="The publication date and time of the article")
     content = Column(Text, nullable=False, comment="The content of the article")
-    category = Column(String(255), comment="The category or section of the article")
-    tags = Column(String(255), comment="Comma-separated tags associated with the article")
+    category = Column(Text, comment="JSON array of categories of the article")
+    normalized_category = Column(Text, comment="JSON array of normalized category names")
+    tags = Column(Text, comment="JSON array of tags associated with the article")
     item_type = Column(String(50), nullable=False, comment="The type of item, e.g. 'article'")
     
     crawler_at = Column(
