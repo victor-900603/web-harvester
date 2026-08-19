@@ -16,7 +16,7 @@
 
 ```
 web-harvester/
-├── run.py                  # 主程式進入點
+├── main.py                  # 主程式進入點（CLI）
 ├── requirements.txt
 ├── config/
 │   ├── settings.yaml       # 全域設定（引擎、日誌、儲存）
@@ -81,18 +81,24 @@ python -m pytest test
 
 ## 快速開始
 
+### 列出可用站點
+
+```bash
+python main.py --list-sites
+```
+
 ### 執行內建範例（聯合新聞網）
 
 ```bash
-python run.py
+python main.py --site udn_news
 ```
 
 ### 更換目標網站
 
-編輯 [run.py](run.py)，將 `load_site_config` 的參數改為對應設定檔名稱（不含副檔名）：
+在 `config/sites/` 新增對應設定檔後，以 `--site` 指定站點 ID（設定檔名不含副檔名）：
 
-```python
-site_config = load_site_config("your_site")
+```bash
+python main.py --site your_site
 ```
 
 ## 設定說明
@@ -185,7 +191,7 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 - site 的 `list_page.selectors` 會區分 HTML 與 JSON 兩種結構，混用即失敗
 - `article_page` 的欄位設定物件（`field_config`）依 `article_page.type` 約束：`html` 型必填 `selector`、`json` 型必填 `path`，缺漏即報錯
 
-新增或修改網站設定後，可直接執行 `python run.py`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
+新增或修改網站設定後，可直接執行 `python main.py --site <site_id>`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
 
 ## 資料庫結構
 
@@ -207,8 +213,8 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 ## 新增網站
 
 1. 在 `config/sites/` 目錄下新增 `<site_name>.yaml`，參考 [config/sites/example.yaml](config/sites/example.yaml) 填寫各欄位。
-2. 在 [run.py](run.py) 中呼叫 `load_site_config("<site_name>")`。
-3. 執行 `python run.py`。
+2. 以 `--site` 指定站點 ID 執行：`python main.py --site <site_name>`。
+3. 也可先用 `python main.py --list-sites` 確認站點已註冊。
 
 ## 依賴套件
 
