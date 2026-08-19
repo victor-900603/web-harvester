@@ -10,11 +10,16 @@ from ..core import Item, Request, Response
 from ..parsers import HTMLParser, JSONParser
 
 from .base import BaseCrawler
+from .classifier import Classifier
 
 logger = logging.getLogger(__name__)
 
 class SiteCrawler(BaseCrawler):
-    def __init__(self, site_config: Dict[str, Any]):
+    def __init__(
+        self,
+        site_config: Dict[str, Any],
+        category_normalization: Optional[Dict[str, str]] = None,
+    ):
         self._config = site_config
         self.name = site_config.get("name", "unknown")
         self.base_url = site_config.get("base_url", "")
@@ -22,6 +27,7 @@ class SiteCrawler(BaseCrawler):
         self._article_cfg = site_config.get("article_page", {})
         self._request_cfg = site_config.get("request", {})
         self._limits = site_config.get("limits", {})
+        self._classifier = Classifier(site_config, category_normalization)
 
     @property
     def limits(self) -> dict:
@@ -194,6 +200,14 @@ class SiteCrawler(BaseCrawler):
             data = self._extract_article_html(response, selectors)
 
         data.setdefault("url", response.url)
+
+        categories, normalized_categories, tags = self._classifier.classify(response, data)
+        if categories:
+            data["category"] = categories
+        if normalized_categories:
+            data["normalized_category"] = normalized_categories
+        if tags:
+            data["tags"] = tags
 
         yield Item(
             data=data,
