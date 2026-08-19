@@ -49,6 +49,18 @@ class TestSettings:
             Settings(config_path=str(bad))
         assert "engine.mode" in str(exc_info.value)
 
+    def test_category_normalization_loaded(self):
+        settings = Settings()
+        assert isinstance(settings.get("category_normalization"), dict)
+        assert settings.get("category_normalization.股市") == "財經"
+
+    def test_category_normalization_merged_from_external_file(self):
+        settings = Settings()
+        norm = settings.get("category_normalization")
+        assert "股市" in norm
+        assert norm["資通訊"] == "科技"
+        assert norm["棒球"] == "運動"
+
 
 class TestValidateConfig:
     def test_valid_settings_passes(self):
@@ -138,6 +150,92 @@ class TestValidateConfig:
                     "title": {"type": "text", "selector": "h1.title"},
                 },
             },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+
+class TestCategorySchema:
+    def test_valid_category_meta_passes(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {
+                "sources": [{"type": "meta", "name": "section"}],
+                "default": "其他",
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_valid_category_all_source_types_pass(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {
+                "sources": [
+                    {"type": "url", "regex": "/story/(\\d+)/", "mapping": {"1": "A"}},
+                    {"type": "meta", "property": "article:section"},
+                    {"type": "selector", "selector": "a.breadcrumb", "attr": "text", "join": ">"},
+                    {"type": "json_ld", "path": "itemListElement.1.name"},
+                    {"type": "list_data", "path": "cate_id"},
+                    {"type": "article_json", "path": "data.category"},
+                    {"type": "keyword", "rules": [{"keywords": ["a"], "value": "A"}]},
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_category_without_sources_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {"default": "其他"},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_url_source_missing_regex_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {"sources": [{"type": "url"}]},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_meta_source_missing_name_and_property_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {"sources": [{"type": "meta"}]},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_unknown_source_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "category": {"sources": [{"type": "bogus", "foo": "bar"}]},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_valid_tags_passes(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "tags": {
+                "sources": [{"type": "meta", "name": "news_keywords", "split": ","}],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_tags_unknown_key_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "tags": {"sources": [{"type": "meta", "name": "section"}], "extra": True},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")

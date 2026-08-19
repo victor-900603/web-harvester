@@ -18,6 +18,11 @@ request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true            # Set to false only for development/testing with self-signed certs
 
+# Global category normalization: maps site-specific category names to a unified
+# name so that filtering across sites uses a consistent vocabulary.
+# Defined in the separate file config/category_normalization.yaml (merged by Settings).
+category_normalization: {}
+
 # Logging configuration
 logging:
   level: "INFO"
