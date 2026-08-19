@@ -210,6 +210,8 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 | `crawler_at` | DateTime | 爬取時間（UTC） |
 | `extra_data` | Text | 額外資料（JSON 格式） |
 
+去重機制：寫入前先以 `url` 查詢是否已存在（`data.url` 優先於 `item.url`），存在則跳過；`url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
+
 ## 新增網站
 
 1. 在 `config/sites/` 目錄下新增 `<site_name>.yaml`，參考 [config/sites/example.yaml](config/sites/example.yaml) 填寫各欄位。
