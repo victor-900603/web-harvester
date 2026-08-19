@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+import httpx
 import pytest
 
 from src.core import Item, Request
@@ -32,7 +33,7 @@ class FakeCrawler(BaseCrawler):
         yield Item(data={"title": response.url}, source=self.name, url=response.url)
 
 
-def make_engine(mode="sync", concurrency=1):
+def make_engine(mode="sync", concurrency=1, max_retries=1):
     return CrawlerEngine(
         {
             "engine": {
@@ -40,7 +41,7 @@ def make_engine(mode="sync", concurrency=1):
                 "max_concurrency": concurrency,
                 "request_timeout": 30,
                 "download_delay": 0,
-                "max_retries": 1,
+                "max_retries": max_retries,
             },
             "request": {},
         }
@@ -95,6 +96,25 @@ class TestSyncLimits:
         engine = make_engine("turbo")
         with pytest.raises(ValueError):
             engine.run(FakeCrawler(["https://e.com/a"]))
+
+    def test_http_error_retries_then_returns_none(self, monkeypatch):
+        calls = []
+
+        def failing_fetch(self, request):
+            calls.append(request.url)
+            raise httpx.HTTPStatusError(
+                "404 Client Error",
+                request=httpx.Request(request.method, request.url),
+                response=httpx.Response(404, request=httpx.Request(request.method, request.url)),
+            )
+
+        monkeypatch.setattr(CrawlerEngine, "_fetch_sync", failing_fetch)
+        monkeypatch.setattr(time, "sleep", lambda _: None)
+        engine = make_engine("sync", max_retries=3)
+        crawler = FakeCrawler(["https://e.com/bad"])
+        items = engine.run(crawler)
+        assert items == []
+        assert len(calls) == 3
 
 
 class TestAsyncLimits:

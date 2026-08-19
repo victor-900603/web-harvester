@@ -46,6 +46,16 @@ class TestStartRequests:
 
 
 class TestParseList:
+    def test_non_ok_list_yields_nothing(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news?page=1",
+            "<article class='news-item'><a href='/news/1'>One</a></article>",
+            status_code=403,
+        )
+        results = list(crawler.parse_list(resp))
+        assert results == []
+
     def test_html_list_yields_absolute_url_requests(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
         resp = make_response(
@@ -96,6 +106,16 @@ class TestParseList:
 
 
 class TestParseArticle:
+    def test_non_ok_article_yields_nothing(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<h1 class='article-title'>Title</h1>",
+            status_code=404,
+        )
+        results = list(crawler.parse_article(resp))
+        assert results == []
+
     def test_html_article_extracts_fields(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
         resp = make_response(
