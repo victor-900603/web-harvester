@@ -183,6 +183,7 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 - 枚舉值（如 `type` 僅允許 `html` / `json`、`engine.mode` 僅允許 `sync` / `async`）
 - 未知欄位攔截（`additionalProperties: false`），打錯字會直接報錯
 - site 的 `list_page.selectors` 會區分 HTML 與 JSON 兩種結構，混用即失敗
+- `article_page` 的欄位設定物件（`field_config`）依 `article_page.type` 約束：`html` 型必填 `selector`、`json` 型必填 `path`，缺漏即報錯
 
 新增或修改網站設定後，可直接執行 `python run.py`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
 
