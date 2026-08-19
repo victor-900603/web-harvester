@@ -6,8 +6,8 @@
 
 - 執行：`python run.py`（在專案根目錄執行；路徑皆為相對根目錄）
 - venv：`.venv`（Python 3.11），啟動：`.venv\Scripts\Activate.ps1`
-- 無測試框架，`test/` 為空目錄。驗證方式：`python run.py` 冒煙測試，或寫臨時腳本 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 跳過真實網路
-- 無 lint / formatter / typecheck 設定，改完直接跑 `python run.py`
+- 測試：`python -m pytest test`（pytest 於 requirements.txt）；engine 測試用 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 跳過真實網路，storage 測試用 pytest `tmp_path`
+- 無 lint / formatter / typecheck 設定，改完直接跑測試 + `python run.py`
 
 ## 架構與執行流程
 
