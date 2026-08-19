@@ -26,7 +26,7 @@ def setup_logging(
     
     if log_format is None:
         log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        color_log_format = "%(log_color)s" + log_format
+    color_log_format = "%(log_color)s" + log_format
         
     main_logger = logging.getLogger()
     main_logger.setLevel(getattr(logging, level.upper()))

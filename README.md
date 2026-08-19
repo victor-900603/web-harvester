@@ -20,6 +20,9 @@ web-harvester/
 ├── requirements.txt
 ├── config/
 │   ├── settings.yaml       # 全域設定（引擎、日誌、儲存）
+│   ├── schema/             # 設定檔驗證 JSON Schema
+│   │   ├── settings.schema.json
+│   │   └── site.schema.json
 │   └── sites/
 │       ├── example.yaml    # 範例網站設定
 │       └── udn_news.yaml   # 聯合新聞網設定
@@ -78,10 +81,14 @@ site_config = load_site_config("your_site")
 | `engine.request_timeout` | 請求逾時（秒） | `30` |
 | `engine.download_delay` | 同一網域請求間隔（秒） | `1.0` |
 | `engine.max_retries` | 失敗請求最大重試次數 | `3` |
+| `request.user_agent` | 全域請求的 User-Agent | `web-harvester/1.0` |
+| `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
 | `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
 | `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
 | `database.enabled` | 是否啟用資料庫儲存 | `true` |
 | `database.url` | 資料庫連線字串 | `sqlite:///data/articles.db` |
+| `database.pool_size` | 連線池大小（僅非 SQLite backend 生效） | `5` |
+| `database.max_overflow` | 連線池溢位上限（僅非 SQLite backend 生效） | `10` |
 
 ### 網站設定（`config/sites/<name>.yaml`）
 
@@ -90,10 +97,10 @@ name: "網站名稱"
 base_url: "https://example.com"
 
 limits:
-  max_items: 50          # 最大爬取筆數
-  max_pages: 5           # 最大爬取頁數
-  stop_on_duplicate: true
-  timeout: 300
+  max_items: 50          # 最大爬取筆數，達到即停止
+  max_pages: 5           # 最大爬取頁數上限（會蓋住 pagination.max_pages）
+  stop_on_duplicate: true  # 遇到重複 URL 即停止
+  timeout: 300           # 整體爬取時間上限（秒）
 
 request:
   headers:
@@ -136,6 +143,23 @@ article_page:
 
 Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對與命名群組萃取。
 
+### Schema 驗證
+
+所有設定檔在載入時會透過 [JSON Schema](https://json-schema.org/) 進行嚴格驗證，欄位打錯或型別不符時會在載入階段直接拋出 `ConfigValidationError`，避免錯誤設定靜默進入執行階段。
+
+- `config/schema/settings.schema.json`：驗證 `config/settings.yaml`
+- `config/schema/site.schema.json`：驗證 `config/sites/*.yaml`
+
+驗證內容包含：
+
+- 必填欄位（如 site 的 `name`、`base_url`，settings 的 `app`、`engine`）
+- 欄位型別與數值範圍（如 `engine.max_concurrency` 須為正整數）
+- 枚舉值（如 `type` 僅允許 `html` / `json`、`engine.mode` 僅允許 `sync` / `async`）
+- 未知欄位攔截（`additionalProperties: false`），打錯字會直接報錯
+- site 的 `list_page.selectors` 會區分 HTML 與 JSON 兩種結構，混用即失敗
+
+新增或修改網站設定後，可直接執行 `python run.py`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
+
 ## 資料庫結構
 
 資料存入 `articles` 資料表，主要欄位如下：
@@ -166,6 +190,7 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 | `requests` / `aiohttp` / `httpx` | HTTP 請求 |
 | `beautifulsoup4` + `lxml` | HTML 解析 |
 | `PyYAML` | 設定檔讀取 |
+| `jsonschema` | 設定檔 Schema 驗證 |
 | `SQLAlchemy` | 資料庫 ORM |
 | `colorlog` | 彩色日誌輸出 |
 | `celery` + `redis` | 非同步任務佇列（選用） |

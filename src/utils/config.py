@@ -5,11 +5,44 @@ import os
 from typing import Any, Dict, List, Optional
 
 import yaml
+from jsonschema import FormatChecker, ValidationError, validate
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = os.path.join("config", "settings.yaml")
 DEFAULT_SITE_CONFIG_DIR = os.path.join("config", "sites")
+DEFAULT_SETTINGS_SCHEMA = os.path.join("config", "schema", "settings.schema.json")
+DEFAULT_SITE_SCHEMA = os.path.join("config", "schema", "site.schema.json")
+
+
+class ConfigValidationError(ValueError):
+    """Raised when a configuration file fails schema validation."""
+
+
+def _load_schema(schema_path: str) -> dict:
+    """Load a JSON schema from disk."""
+    with open(schema_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def validate_config(
+    data: dict,
+    schema_path: str = DEFAULT_SETTINGS_SCHEMA,
+    name: str = "config",
+) -> None:
+    """Validate configuration data against a JSON schema.
+
+    Raises:
+        ConfigValidationError: If the configuration does not conform to the schema.
+    """
+    try:
+        validate(instance=data, schema=_load_schema(schema_path), format_checker=FormatChecker())
+    except ValidationError as e:
+        path = ".".join(str(p) for p in e.absolute_path) or "<root>"
+        raise ConfigValidationError(
+            f"Validation failed for {name} at '{path}': {e.message}"
+        ) from e
+
 
 class Settings:
     def __init__(self, config_path: str = DEFAULT_CONFIG_PATH):
@@ -27,11 +60,13 @@ class Settings:
         with open(self.config_path, "r", encoding="utf-8") as f:
             try:
                 self._data = yaml.safe_load(f) or {}
+                validate_config(self._data, DEFAULT_SETTINGS_SCHEMA, self.config_path)
                 logger.info(f"Config loaded from {self.config_path}")
 
             except yaml.YAMLError as e:
                 logger.error(f"Error parsing config file {self.config_path}: {e}")
                 self._data = {}
+                raise ConfigValidationError(f"Error parsing config file {self.config_path}: {e}") from e
                 
                 
     def get(self, key: str, default: Optional[Any] = None) -> Any:
@@ -105,6 +140,7 @@ def load_site_config(site_id: str, sites_dir: str = DEFAULT_SITE_CONFIG_DIR) -> 
     with open(filepath, "r", encoding="utf-8") as f:
         try:
             config = yaml.safe_load(f) or {}
+            validate_config(config, DEFAULT_SITE_SCHEMA, filepath)
             config.setdefault("site_id", site_id)
             logger.info(f"Site config loaded from {filepath}: {config.get('name', 'N/A')}")
             return config

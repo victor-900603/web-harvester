@@ -21,6 +21,12 @@ class SiteCrawler(BaseCrawler):
         self._list_cfg = site_config.get("list_page", {})
         self._article_cfg = site_config.get("article_page", {})
         self._request_cfg = site_config.get("request", {})
+        self._limits = site_config.get("limits", {})
+
+    @property
+    def limits(self) -> dict:
+        """Site-level crawl limits from the configuration."""
+        return self._limits
         
     def start_requests(self) -> Generator[Request, None, None]:
         """Generate initial requests to start crawling the site."""
@@ -33,7 +39,11 @@ class SiteCrawler(BaseCrawler):
         if pagination.get("enabled", False):
             start = pagination.get("start", 1)
             max_pages = pagination.get("max_pages", 1)
-            
+
+            limits_max_pages = self._limits.get("max_pages")
+            if limits_max_pages is not None:
+                max_pages = min(max_pages, limits_max_pages)
+
             for page_num in range(start, start + max_pages):
                 url = list_url.format(page=page_num)
                 yield Request(

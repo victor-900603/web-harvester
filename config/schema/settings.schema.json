@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://web-harvester.local/schemas/settings.schema.json",
+  "title": "Web Harvester General Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": ["name", "version"]
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["sync", "async"]
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "request_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "download_delay": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["mode"]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user_agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verify_ssl": {
+          "type": "boolean"
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        },
+        "format": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "backup_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["level"]
+    },
+    "json_storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "output_dir": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["enabled"]
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "echo": {
+          "type": "boolean"
+        },
+        "pool_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_overflow": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": ["app", "engine"]
+}

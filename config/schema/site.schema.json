@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://web-harvester.local/schemas/site.schema.json",
+  "title": "Web Harvester Site Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "site_id": {
+      "type": "string",
+      "description": "Identifier injected automatically when loading the config."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The display name of the site."
+    },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://",
+      "description": "The base URL of the site, used to resolve relative links."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_items": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of items to collect before stopping."
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of list pages to crawl. Takes precedence as a cap over pagination.max_pages."
+        },
+        "stop_on_duplicate": {
+          "type": "boolean",
+          "description": "Stop crawling when a duplicate URL is encountered."
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Overall crawl timeout in seconds."
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "cookies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "list_page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "List page URL. May contain a {page} placeholder for pagination."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST"]
+        },
+        "type": {
+          "type": "string",
+          "enum": ["html", "json"]
+        },
+        "selectors": {
+          "$ref": "#/$defs/list_selectors"
+        },
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_pages": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": ["enabled"]
+        }
+      },
+      "required": ["url", "type"]
+    },
+    "article_page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["html", "json"]
+        },
+        "selectors": {
+          "type": "object",
+          "description": "Map of output field names to a CSS selector / JSON path (string) or a field configuration object.",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/field_config"
+              }
+            ]
+          }
+        }
+      },
+      "required": ["type"]
+    }
+  },
+  "required": ["name", "base_url"],
+  "$defs": {
+    "list_selectors": {
+      "description": "List page selectors. Use the HTML form for HTML list pages and the JSON form for JSON list pages.",
+      "oneOf": [
+        {
+          "title": "HTML list selectors",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "string",
+              "description": "CSS selector for the container of each list item."
+            },
+            "link": {
+              "type": "string",
+              "description": "CSS selector for the link element within an item."
+            },
+            "link_attr": {
+              "type": "string",
+              "description": "Attribute to read the link URL from (default: href)."
+            }
+          },
+          "required": ["items"]
+        },
+        {
+          "title": "JSON list selectors",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "string",
+              "description": "JSON path to the list of items."
+            },
+            "url_field": {
+              "type": "string",
+              "description": "Field name holding the article URL within each item."
+            },
+            "url_template": {
+              "type": "string",
+              "description": "URL template with a {url} placeholder used to build the final URL."
+            }
+          },
+          "required": ["items", "url_field"]
+        }
+      ]
+    },
+    "field_config": {
+      "description": "Configuration object for a single extracted field.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text", "datetime", "attr"]
+        },
+        "selector": {
+          "type": "string",
+          "description": "CSS selector (HTML article pages)."
+        },
+        "path": {
+          "type": "string",
+          "description": "JSON path (JSON article pages)."
+        },
+        "attr": {
+          "type": "string",
+          "description": "Attribute to extract. Defaults to 'text'."
+        },
+        "datetime_format": {
+          "type": "string",
+          "description": "strptime format used when type is 'datetime'."
+        },
+        "regex": {
+          "type": "string",
+          "description": "Regular expression applied to the extracted value."
+        }
+      }
+    }
+  }
+}

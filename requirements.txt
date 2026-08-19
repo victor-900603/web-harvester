@@ -1,6 +1,7 @@
 # General dependencies
 colorlog==6.7.0
 PyYAML>=5.4.0
+jsonschema>=4.0.0
 
 # HTTP
 requests==2.31.0

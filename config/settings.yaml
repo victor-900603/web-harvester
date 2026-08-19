@@ -13,6 +13,11 @@ engine:
   download_delay: 1.0         # Delay between requests to the same domain in seconds
   max_retries: 3              # Maximum number of retries for failed requests
 
+# Global HTTP request settings applied to every request.
+request:
+  user_agent: "web-harvester/1.0"
+  verify_ssl: true            # Set to false only for development/testing with self-signed certs
+
 # Logging configuration
 logging:
   level: "INFO"
@@ -32,5 +37,7 @@ database:
   # PostgreSQL: "postgresql://user:pass@localhost:5432/news_db"
   # MySQL: "mysql+pymysql://user:pass@localhost:3306/news_db"
   echo: false
+  # Note: pool_size and max_overflow only apply to non-SQLite backends.
+  # For SQLite they are ignored by the storage layer.
   pool_size: 5
   max_overflow: 10
