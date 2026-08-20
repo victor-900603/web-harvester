@@ -25,6 +25,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="列出所有可用的站點後退出",
     )
+    parser.add_argument(
+        "-k",
+        "--keyword",
+        metavar="KW",
+        help="關鍵字搜尋（需站點設定 search）",
+    )
+    parser.add_argument(
+        "-c",
+        "--category",
+        metavar="CAT",
+        help="分類篩選（需站點設定 categories）",
+    )
     return parser
 
 
@@ -66,6 +78,8 @@ def main(argv: list | None = None) -> int:
     crawler = SiteCrawler(
         site_config,
         category_normalization=settings.get("category_normalization"),
+        keyword=args.keyword,
+        category=args.category,
     )
     engine.run(crawler)
     return 0

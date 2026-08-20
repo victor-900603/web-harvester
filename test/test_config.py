@@ -241,6 +241,69 @@ class TestCategorySchema:
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
 
+class TestListPageSearchSchema:
+    def test_search_block_categories_default_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "url": "https://example.com/news?page={page}",
+                "type": "html",
+                "search": {
+                    "url": "https://example.com/search?q={keyword}&page={page}",
+                    "type": "json",
+                },
+                "categories": {"股市": "7251", "政治": "6645"},
+                "category_default": "0",
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_categories_non_string_value_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "url": "https://example.com/news",
+                "type": "html",
+                "categories": {"股市": 7251},
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_empty_search_url_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "url": "https://example.com/news",
+                "type": "html",
+                "search": {
+                    "url": "",
+                },
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_search_extra_property_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "url": "https://example.com/news",
+                "type": "html",
+                "search": {
+                    "url": "https://example.com/search",
+                    "bogus": "x",
+                },
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+
 class TestLoadSiteConfig:
     def test_loads_example_site(self):
         config = load_site_config("example")

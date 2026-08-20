@@ -28,6 +28,18 @@ class TestParser:
         args = parser.parse_args(["--list-sites"])
         assert args.list_sites is True
 
+    def test_keyword_and_category_arguments(self):
+        parser = main.build_parser()
+        args = parser.parse_args(["--site", "example", "--keyword", "股市", "--category", "財經"])
+        assert args.keyword == "股市"
+        assert args.category == "財經"
+
+    def test_keyword_short_flag(self):
+        parser = main.build_parser()
+        args = parser.parse_args(["--site", "example", "-k", "股市", "-c", "財經"])
+        assert args.keyword == "股市"
+        assert args.category == "財經"
+
 
 class TestListSites:
     def test_lists_available_sites(self, monkeypatch, capsys):
@@ -78,7 +90,48 @@ class TestMain:
         code = main.main(["--site", "example"])
         assert code == 0
         assert captured["site_id"] == "example"
-        assert captured["crawler"] == ("crawler", {"name": "example"}, {"category_normalization": None})
+        assert captured["crawler"] == (
+            "crawler",
+            {"name": "example"},
+            {"category_normalization": None, "keyword": None, "category": None},
+        )
+
+    def test_keyword_and_category_passed_to_crawler(self, monkeypatch):
+        captured = {}
+
+        def fake_load(site_id):
+            return {"name": "example"}
+
+        def fake_settings():
+            class FakeSettings:
+                def get(self, key, default=None):
+                    return {"logging.level": "INFO"}.get(key, default)
+
+            return FakeSettings()
+
+        def fake_setup(**kwargs):
+            pass
+
+        class FakeEngine:
+            def __init__(self, settings):
+                pass
+
+            def run(self, crawler):
+                captured["crawler"] = crawler
+
+        monkeypatch.setattr(main, "load_site_config", fake_load)
+        monkeypatch.setattr(main, "Settings", fake_settings)
+        monkeypatch.setattr(main, "setup_logging", fake_setup)
+        monkeypatch.setattr(main, "build_engine", FakeEngine)
+        monkeypatch.setattr(main, "SiteCrawler", lambda cfg, **kw: ("crawler", cfg, kw))
+
+        code = main.main(["--site", "example", "--keyword", "股市", "--category", "財經"])
+        assert code == 0
+        assert captured["crawler"] == (
+            "crawler",
+            {"name": "example"},
+            {"category_normalization": None, "keyword": "股市", "category": "財經"},
+        )
 
     def test_unknown_site_errors(self, monkeypatch, capsys):
         def fake_load(site_id):

@@ -119,22 +119,46 @@
           "$ref": "#/$defs/list_selectors"
         },
         "pagination": {
+          "$ref": "#/$defs/pagination"
+        },
+        "search": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Optional keyword-search settings. When --keyword is given and this block is present, it overrides the corresponding list_page fields.",
           "properties": {
-            "enabled": {
-              "type": "boolean"
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Keyword-search list URL. May contain {keyword}, {category} and {page} placeholders."
             },
-            "start": {
-              "type": "integer",
-              "minimum": 1
+            "method": {
+              "type": "string",
+              "enum": ["GET", "POST"]
             },
-            "max_pages": {
-              "type": "integer",
-              "minimum": 1
+            "type": {
+              "type": "string",
+              "enum": ["html", "json"]
+            },
+            "selectors": {
+              "$ref": "#/$defs/list_selectors"
+            },
+            "pagination": {
+              "$ref": "#/$defs/pagination"
             }
           },
-          "required": ["enabled"]
+          "required": ["url"]
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Optional mapping of category name to its in-site URL value, used by --category."
+        },
+        "category_default": {
+          "type": "string",
+          "description": "Optional default value for the {category} placeholder when --category is not given."
         }
       },
       "required": ["url", "type"]
@@ -219,6 +243,24 @@
   },
   "required": ["name", "base_url"],
   "$defs": {
+    "pagination": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["enabled"]
+    },
     "list_selectors": {
       "description": "List page selectors. Use the HTML form for HTML list pages and the JSON form for JSON list pages.",
       "oneOf": [

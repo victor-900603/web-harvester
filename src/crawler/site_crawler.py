@@ -14,11 +14,20 @@ from .classifier import Classifier
 
 logger = logging.getLogger(__name__)
 
+class _FormatDict(dict):
+    """dict subclass that returns the original placeholder when a key is missing."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
 class SiteCrawler(BaseCrawler):
     def __init__(
         self,
         site_config: Dict[str, Any],
         category_normalization: Optional[Dict[str, str]] = None,
+        keyword: Optional[str] = None,
+        category: Optional[str] = None,
     ):
         self._config = site_config
         self.name = site_config.get("name", "unknown")
@@ -28,21 +37,82 @@ class SiteCrawler(BaseCrawler):
         self._request_cfg = site_config.get("request", {})
         self._limits = site_config.get("limits", {})
         self._classifier = Classifier(site_config, category_normalization)
+        self._keyword = keyword
+        self._category = category
 
     @property
     def limits(self) -> dict:
         """Site-level crawl limits from the configuration."""
         return self._limits
-        
+
+    def _effective_list_cfg(self) -> Dict[str, Any]:
+        """Return the list_page config to use, with ``search`` overriding when searching.
+
+        When a keyword is given and a ``search`` block is configured, the search
+        block's url/type/selectors/method/pagination override the corresponding
+        list_page fields. Otherwise the plain list_page config is returned.
+        """
+        cfg = self._list_cfg
+        if self._keyword:
+            search = cfg.get("search")
+            if search:
+                effective = dict(cfg)
+                effective.update(search)
+                return effective
+            logger.warning("Keyword search requested but 'search' is not configured; falling back to base list page.")
+        return cfg
+
+    def _build_list_url(self, page_num: Optional[int] = None) -> Optional[str]:
+        """Build a list page URL, filling {page}, {keyword} and {category} placeholders.
+
+        ``category`` is resolved through the ``categories`` mapping (name ->
+        in-site value). When a template cannot express both keyword and category,
+        an error is logged and None is returned.
+        """
+        keyword = self._keyword
+        category_name = self._category
+        cfg = self._effective_list_cfg()
+
+        template = cfg.get("url", self.base_url)
+
+        categories = cfg.get("categories", {})
+        category_value = ""
+        if category_name:
+            category_value = categories.get(category_name)
+            if category_value is None:
+                logger.warning(
+                    f"Category '{category_name}' not found in 'categories', using the raw name as the value."
+                )
+                category_value = category_name
+        elif "{category}" in template:
+            category_value = cfg.get("category_default", "")
+
+        if keyword and category_name and not ("{keyword}" in template and "{category}" in template):
+            logger.error(
+                "Both keyword and category were given, but the list URL template cannot express them; skipping."
+            )
+            return None
+
+        values = _FormatDict(
+            keyword=keyword or "",
+            category=category_value,
+        )
+        if page_num is not None:
+            values["page"] = page_num
+        elif "{page}" in template:
+            values["page"] = cfg.get("pagination", {}).get("start", 1)
+
+        return template.format_map(values)
+
     def start_requests(self) -> Generator[Request, None, None]:
         """Generate initial requests to start crawling the site."""
-        list_url = self._list_cfg.get("url", self.base_url)
-        pagination = self._list_cfg.get("pagination", {})
-        method = self._list_cfg.get("method", "GET")
+        cfg = self._effective_list_cfg()
+        pagination = cfg.get("pagination", {})
+        method = cfg.get("method", "GET")
 
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
-        
+
         if pagination.get("enabled", False):
             start = pagination.get("start", 1)
             max_pages = pagination.get("max_pages", 1)
@@ -52,22 +122,27 @@ class SiteCrawler(BaseCrawler):
                 max_pages = min(max_pages, limits_max_pages)
 
             for page_num in range(start, start + max_pages):
-                url = list_url.format(page=page_num)
+                url = self._build_list_url(page_num=page_num)
+                if url is None:
+                    continue
                 yield Request(
-                    url=url, 
+                    url=url,
                     method=method,
-                    headers=headers, 
-                    cookies=cookies, 
+                    headers=headers,
+                    cookies=cookies,
                     callback="parse_list",
-                    meta={"page": page_num}, 
+                    meta={"page": page_num},
                 )
         else:
+            url = self._build_list_url()
+            if url is None:
+                return
             yield Request(
-                url=list_url, 
+                url=url,
                 method=method,
-                headers=headers, 
-                cookies=cookies, 
-                callback="parse_list", 
+                headers=headers,
+                cookies=cookies,
+                callback="parse_list",
             )
     
     def parse(self, response: Response) -> Generator[Union[Request, Item], None, None]:
@@ -87,8 +162,9 @@ class SiteCrawler(BaseCrawler):
             logger.warning(f"List page returned non-OK status {response.status_code}: {response.url}")
             return
 
-        list_type = self._list_cfg.get("type", "html")
-        selectors = self._list_cfg.get("selectors", {})
+        cfg = self._effective_list_cfg()
+        list_type = cfg.get("type", "html")
+        selectors = cfg.get("selectors", {})
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
         
