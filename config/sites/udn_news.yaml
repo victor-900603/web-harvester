@@ -16,19 +16,16 @@ request:
     Referer: "https://udn.com"
 
 list_page:
-  url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
-  method: "GET"
   type: "json"
 
   selectors:
     items: "lists"
     url_field: "titleLink"
-    url_template: "https://udn.com{url}"
 
   pagination:
     enabled: true
     start: 1
-    max_pages: 1
+    max_pages: 2
 
   # 分類名稱對應站內 cate_id（即時新聞頻道）
   categories:
@@ -48,14 +45,17 @@ list_page:
   # 未指定 --category 時的預設分類（0 = 全部）
   category_default: "0"
 
-  # 關鍵字搜尋：titleLink 為絕對 URL，故 url_template 直接取原值
-  search:
-    url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
-    type: "json"
-    selectors:
-      items: "lists"
-      url_field: "titleLink"
-      url_template: "{url}"
+  sources:
+    # 預設來源（無 {keyword}）：即時新聞列表，titleLink 為相對路徑
+    - url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
+      selectors:
+        url_template: "https://udn.com{url}"
+
+    # 關鍵字搜尋來源：titleLink 為絕對 URL，故 url_template 直接取原值；
+    # searchword API 不支援分類，故不含 {category} 佔位符
+    - url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
+      selectors:
+        url_template: "{url}"
 
 article_page:
   type: "html"

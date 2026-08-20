@@ -22,22 +22,22 @@ request:
   cookies: {}
 
 # List page configuration: how to find article links and handle pagination.
+# Fields at this level (type/selectors/pagination) are defaults inherited by
+# every entry in `sources` unless a source overrides them.
 list_page:
-  url: "https://example.com/news?page={page}"
-  method: "GET"
   type: "html"                # html | json
 
   # HTML selectors to extract article links from the list page.
   selectors:
-    items: "article.news-item" 
+    items: "article.news-item"
     link: "a"
     link_attr: "href"
 
   # JSON selectors to extract article links if the list page returns JSON.
   # selectors:
   #   items: "data.articles"
-  #   url_field: "url"  
-  #   url_template: "https://example.com{url}" 
+  #   url_field: "url"
+  #   url_template: "https://example.com{url}"
 
   # Pagination settings to control how many pages to crawl and where to start.
   pagination:
@@ -51,14 +51,27 @@ list_page:
   #   "科技": "tech"
   # category_default: "business"
 
-  # 關鍵字搜尋（可選）：--keyword 指定時覆蓋上述 url/type/selectors/method/pagination
-  # search:
-  #   url: "https://example.com/search?q={keyword}&page={page}"
-  #   type: "html"
-  #   selectors:
-  #     items: "article.news-item"
-  #     link: "a"
-  #     link_attr: "href"
+  # 列表來源清單（依優先序排列）。來源支援哪些篩選由其 URL 內實際出現的
+  # 佔位符決定：{keyword} 支援關鍵字、{category} 支援分類。
+  # 第一個不含 {keyword} 的來源為預設列表。
+  sources:
+    - url: "https://example.com/news?page={page}"
+      # 可在此覆蓋 type/selectors/pagination（其餘繼承 list_page 預設）
+      # type: "html"
+      # selectors:
+      #   items: "article.news-item"
+
+    # 關鍵字搜尋來源（可選）：--keyword 指定時使用，URL 含 {keyword}
+    # - url: "https://example.com/search?q={keyword}&page={page}"
+    #   type: "html"
+    #   selectors:
+    #     items: "article.news-item"
+    #     link: "a"
+    #     link_attr: "href"
+
+    # 關鍵字＋分類組合來源（可選）：URL 同時含 {keyword} 與 {category}，
+    # 兩者都指定時優先採用；不可組合的站則不要提供此來源
+    # - url: "https://example.com/search?q={keyword}&cat={category}&page={page}"
 
 article_page:
   type: "html"                # html | json

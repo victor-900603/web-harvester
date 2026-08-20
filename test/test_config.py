@@ -91,13 +91,13 @@ class TestValidateConfig:
         data = {
             "name": "x",
             "base_url": "ftp://example.com",
-            "list_page": {"url": "https://example.com", "type": "html"},
+            "list_page": {"sources": [{"url": "https://example.com"}]},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
     def test_missing_base_url_rejected(self):
-        data = {"name": "x", "list_page": {"url": "https://example.com", "type": "html"}}
+        data = {"name": "x", "list_page": {"sources": [{"url": "https://example.com"}]}}
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
         assert "base_url" in str(exc_info.value)
@@ -107,8 +107,8 @@ class TestValidateConfig:
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "url": "https://example.com",
                 "type": "html",
+                "sources": [{"url": "https://example.com"}],
                 "selectors": {
                     "items": "a",
                     "link": "a",
@@ -241,63 +241,99 @@ class TestCategorySchema:
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
 
-class TestListPageSearchSchema:
-    def test_search_block_categories_default_valid(self):
+class TestListPageSourcesSchema:
+    def test_sources_categories_default_valid(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "url": "https://example.com/news?page={page}",
                 "type": "html",
-                "search": {
-                    "url": "https://example.com/search?q={keyword}&page={page}",
-                    "type": "json",
-                },
+                "sources": [
+                    {"url": "https://example.com/news?page={page}&cat={category}"},
+                    {
+                        "url": "https://example.com/search?q={keyword}&page={page}",
+                        "type": "json",
+                    },
+                ],
                 "categories": {"股市": "7251", "政治": "6645"},
                 "category_default": "0",
             },
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
+    def test_source_partial_selectors_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "type": "json",
+                "selectors": {"items": "lists", "url_field": "titleLink"},
+                "sources": [
+                    {
+                        "url": "https://example.com/api?page={page}",
+                        "selectors": {"url_template": "https://example.com{url}"},
+                    },
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_missing_sources_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "url": "https://example.com/news",
+                "type": "html",
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_empty_sources_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "type": "html",
+                "sources": [],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_without_url_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "type": "html",
+                "sources": [{"type": "json"}],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_extra_property_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "type": "html",
+                "sources": [{"url": "https://example.com/news", "bogus": "x"}],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
     def test_categories_non_string_value_rejected(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "url": "https://example.com/news",
                 "type": "html",
+                "sources": [{"url": "https://example.com/news?cat={category}"}],
                 "categories": {"股市": 7251},
-            },
-        }
-        with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
-
-    def test_empty_search_url_rejected(self):
-        data = {
-            "name": "x",
-            "base_url": "https://example.com",
-            "list_page": {
-                "url": "https://example.com/news",
-                "type": "html",
-                "search": {
-                    "url": "",
-                },
-            },
-        }
-        with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
-
-    def test_search_extra_property_rejected(self):
-        data = {
-            "name": "x",
-            "base_url": "https://example.com",
-            "list_page": {
-                "url": "https://example.com/news",
-                "type": "html",
-                "search": {
-                    "url": "https://example.com/search",
-                    "bogus": "x",
-                },
             },
         }
         with pytest.raises(ConfigValidationError):
