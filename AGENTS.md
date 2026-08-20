@@ -4,7 +4,7 @@
 
 ## 開發指令
 
-- 執行：`python main.py --site <site_id>`（在專案根目錄執行；路徑皆為相對根目錄）；`python main.py --list-sites` 列出可用站點
+- 執行：`python main.py --site <site_id>`（在專案根目錄執行；路徑皆為相對根目錄）；`python main.py --list-sites` 列出可用站點；選用 `--keyword <kw>` 關鍵字搜尋、`--category <名稱>` 分類篩選（可組合，需站點設定 `search`/`categories`）
 - venv：`.venv`（Python 3.11），啟動：`.venv\Scripts\Activate.ps1`
 - 測試：`python -m pytest test`（pytest 於 requirements.txt）；engine 測試用 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 跳過真實網路，storage 測試用 pytest `tmp_path`
 - 無 lint / formatter / typecheck 設定，改完直接跑測試 + `python main.py --site <site_id>`
@@ -18,6 +18,7 @@ main.py → Settings (config/settings.yaml) → setup_logging
 
 - 換目標網站：`python main.py --site <site_id>`（site yaml 檔名不含副檔名），在 `config/sites/<name>.yaml` 新增對應設定
 - `engine.mode`（`sync`/`async`）由 `config/settings.yaml` 控制；async 用 `asyncio` + `httpx.AsyncClient`，sync 用 `httpx.Client`
+- 列表 URL 佔位符：`list_page.url` / `list_page.search.url` 支援 `{page}`/`{keyword}`/`{category}`，由 `SiteCrawler._build_list_url`（site_crawler.py）填值；`--category` 傳名稱經 `categories` 對應表轉站內值；`--keyword` 時 `search` 區塊會覆蓋 list_page 的 url/type/selectors/method/pagination
 - 全域 `request` 區塊的 `user_agent` / `verify_ssl` 自動套用到所有請求；site 層級 `request.headers/cookies` 僅套用到該站
 - 儲存後端由 `build_engine`（engine.py:376）依 settings 掛載：JSON（batch 模式，close 時才寫檔，檔名 `{source}_{date}.json`）+ SQLAlchemy（預設 SQLite）
 

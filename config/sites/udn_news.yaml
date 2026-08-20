@@ -16,7 +16,7 @@ request:
     Referer: "https://udn.com"
 
 list_page:
-  url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id=0&type=breaknews&totalRecNo=100"
+  url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
   method: "GET"
   type: "json"
 
@@ -29,6 +29,33 @@ list_page:
     enabled: true
     start: 1
     max_pages: 1
+
+  # 分類名稱對應站內 cate_id（即時新聞頻道）
+  categories:
+    "要聞": "1"
+    "娛樂": "8"
+    "社會": "2"
+    "地方": "3"
+    "國際": "5"
+    "兩岸": "4"
+    "財經": "6"
+    "股市": "11"
+    "運動": "7"
+    "生活": "9"
+    "科技": "13"
+    "文教": "12"
+
+  # 未指定 --category 時的預設分類（0 = 全部）
+  category_default: "0"
+
+  # 關鍵字搜尋：titleLink 為絕對 URL，故 url_template 直接取原值
+  search:
+    url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
+    type: "json"
+    selectors:
+      items: "lists"
+      url_field: "titleLink"
+      url_template: "{url}"
 
 article_page:
   type: "html"

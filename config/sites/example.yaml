@@ -45,6 +45,21 @@ list_page:
     start: 1
     max_pages: 5
 
+  # 分類名稱對應站內值，供 --category 篩選使用（可選）
+  # categories:
+  #   "財經": "business"
+  #   "科技": "tech"
+  # category_default: "business"
+
+  # 關鍵字搜尋（可選）：--keyword 指定時覆蓋上述 url/type/selectors/method/pagination
+  # search:
+  #   url: "https://example.com/search?q={keyword}&page={page}"
+  #   type: "html"
+  #   selectors:
+  #     items: "article.news-item"
+  #     link: "a"
+  #     link_attr: "href"
+
 article_page:
   type: "html"                # html | json
 

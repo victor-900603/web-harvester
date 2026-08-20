@@ -102,6 +102,18 @@ python main.py --site udn_news
 python main.py --site your_site
 ```
 
+### 關鍵字搜尋與分類篩選
+
+若站點設定提供 `list_page.search` 與 `list_page.categories`，可搭配 `--keyword` / `--category` 使用：
+
+```bash
+python main.py --site udn_news --keyword 台股
+python main.py --site udn_news --category 股市
+python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
+```
+
+`--category` 傳站內分類「名稱」，由 `categories` 對應表轉成站內實際值；名稱不在表中時改用原始名稱。詳見下方「搜尋與篩選」小節。
+
 ## 設定說明
 
 ### 全域設定（`config/settings.yaml`）
@@ -143,6 +155,17 @@ list_page:
   url: "https://example.com/news?page={page}"
   method: "GET"            # GET | POST，列表請求方法（預設 GET）
   type: "html"             # html | json
+  categories:              # 選用：分類名稱 → 站內 URL 值
+    "股市": "7251"
+    "政治": "6645"
+  category_default: "0"    # 選用：未指定 --category 時 {category} 的填值
+  search:                  # 選用：關鍵字搜尋入口，--keyword 指定時覆蓋上述 url/type/selectors/method/pagination
+    url: "https://example.com/search?q={keyword}&page={page}"
+    type: "html"
+    selectors:
+      items: "article.news-item"
+      link: "a"
+      link_attr: "href"
   selectors:
     items: "article.news-item"
     link: "a"
@@ -285,6 +308,26 @@ tags:
 | `keyword` | 比對標題與內容的關鍵字規則，命中任一即回傳該 `value` |
 
 每個來源都可選配 `mapping`（原始值 → 顯示名）。`category` 與 `tags` 皆為多值累加並自動去重，`category` 支援 `default` 兜底值；兩者皆支援 meta 來源的 `split` 分隔符。
+
+## 搜尋與篩選
+
+爬取前可透過 CLI 參數針對列表頁做關鍵字搜尋或分類篩選，皆為選用、可組合。站點須在 `list_page` 提供對應欄位。
+
+### 佔位符
+
+`list_page.url` 與 `list_page.search.url` 都支援三種佔位符：
+
+| 佔位符 | 來源 | 說明 |
+|--------|------|------|
+| `{page}` | 分頁迴圈 | 由 `pagination` 控制；非分頁時填 `pagination.start` |
+| `{keyword}` | `--keyword` | 未提供時填空字串 |
+| `{category}` | `--category` | 查 `categories` 對應表填站內值；未提供時填 `category_default`（缺省空字串） |
+
+### 行為規則
+
+- 有 `--keyword` 且站點設了 `list_page.search` → 以 `search` 區塊覆蓋 `list_page` 的 url/type/selectors/method/pagination 作為列表模板；未設 `search` 則記 warning 回退用 `list_page.url`。
+- 有 `--category` → 以名稱查 `categories` 表取得站內值；名稱不在表中記 warning 改用原始名稱。
+- 同時指定 `--keyword` 與 `--category` → 模板須同時含 `{keyword}` 與 `{category}` 兩個佔位符，否則記 error 並跳過該頁（不中斷整體爬取）。
 
 ## 新增網站
 
