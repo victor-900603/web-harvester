@@ -25,7 +25,6 @@ list_page:
   pagination:
     enabled: true
     start: 1
-    max_pages: 2
 
   # 分類名稱對應站內 cate_id（即時新聞頻道）
   categories:

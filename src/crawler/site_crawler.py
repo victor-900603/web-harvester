@@ -193,11 +193,7 @@ class SiteCrawler(BaseCrawler):
 
         if pagination.get("enabled", False):
             start = pagination.get("start", 1)
-            max_pages = pagination.get("max_pages", 1)
-
-            limits_max_pages = self._limits.get("max_pages")
-            if limits_max_pages is not None:
-                max_pages = min(max_pages, limits_max_pages)
+            max_pages = self._limits.get("max_pages", 1)
 
             for page_num in range(start, start + max_pages):
                 url = self._build_list_url(page_num=page_num)

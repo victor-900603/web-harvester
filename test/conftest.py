@@ -45,7 +45,7 @@ def sample_site_config() -> dict:
         "list_page": {
             "type": "html",
             "selectors": {"items": "article.news-item", "link": "a", "link_attr": "href"},
-            "pagination": {"enabled": True, "start": 1, "max_pages": 3},
+            "pagination": {"enabled": True, "start": 1},
             "sources": [
                 {"url": "https://example.com/news?page={page}"},
             ],

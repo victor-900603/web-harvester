@@ -344,7 +344,6 @@ class TestLoadSiteConfig:
     def test_loads_example_site(self):
         config = load_site_config("example")
         assert config["name"] == "example"
-        assert config["site_id"] == "example"
 
     def test_missing_site_raises(self):
         with pytest.raises(FileNotFoundError):

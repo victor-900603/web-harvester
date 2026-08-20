@@ -164,7 +164,6 @@ def load_site_config(site_id: str, sites_dir: str = DEFAULT_SITE_CONFIG_DIR) -> 
         try:
             config = yaml.safe_load(f) or {}
             validate_config(config, DEFAULT_SITE_SCHEMA, filepath)
-            config.setdefault("site_id", site_id)
             logger.info(f"Site config loaded from {filepath}: {config.get('name', 'N/A')}")
             return config
 

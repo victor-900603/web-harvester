@@ -8,8 +8,8 @@ from conftest import make_response
 
 
 class TestStartRequests:
-    def test_pagination_generates_pages(self, sample_site_config):
-        del sample_site_config["limits"]["max_pages"]
+    def test_limits_max_pages_controls_pagination(self, sample_site_config):
+        sample_site_config["limits"]["max_pages"] = 3
         crawler = SiteCrawler(sample_site_config)
         urls = [r.url for r in crawler.start_requests()]
         assert urls == [
@@ -19,7 +19,7 @@ class TestStartRequests:
         ]
         assert all(r.callback == "parse_list" for r in crawler.start_requests())
 
-    def test_limits_max_pages_caps_pagination(self, sample_site_config):
+    def test_limits_max_pages_is_authoritative(self, sample_site_config):
         sample_site_config["limits"]["max_pages"] = 2
         crawler = SiteCrawler(sample_site_config)
         urls = [r.url for r in crawler.start_requests()]
@@ -27,6 +27,12 @@ class TestStartRequests:
             "https://example.com/news?page=1",
             "https://example.com/news?page=2",
         ]
+
+    def test_pagination_defaults_to_single_page(self, sample_site_config):
+        del sample_site_config["limits"]["max_pages"]
+        crawler = SiteCrawler(sample_site_config)
+        urls = [r.url for r in crawler.start_requests()]
+        assert urls == ["https://example.com/news?page=1"]
 
     def test_no_pagination_yields_single_request(self, sample_site_config):
         sample_site_config["list_page"]["pagination"]["enabled"] = False

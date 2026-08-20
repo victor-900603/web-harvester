@@ -143,7 +143,7 @@ base_url: "https://example.com"
 
 limits:
   max_items: 50          # 最大爬取筆數，達到即停止
-  max_pages: 5           # 最大爬取頁數上限（會蓋住 pagination.max_pages）
+  max_pages: 5           # 最大爬取頁數上限（唯一權威值，pagination 不再管頁數）
   stop_on_duplicate: true  # 遇到重複 URL 即停止
   timeout: 300           # 整體爬取時間上限（秒）
 
@@ -165,7 +165,6 @@ list_page:
   pagination:              # 選用：來源的繼承預設
     enabled: true
     start: 1
-    max_pages: 5
   sources:                 # 必填：至少一個列表來源，URL 內可含 {page}/{keyword}/{category} 佔位符
     - url: "https://example.com/news?page={page}&cat={category}"   # 預設來源（不含 {keyword}）
       type: "html"
@@ -219,7 +218,7 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 - 枚舉值（如 `type` 僅允許 `html` / `json`、`engine.mode` 僅允許 `sync` / `async`）
 - 未知欄位攔截（`additionalProperties: false`），打錯字會直接報錯
 - site 的 `list_page.selectors` 會區分 HTML 與 JSON 兩種結構，混用即失敗
-- `article_page` 的欄位設定物件（`field_config`）依 `article_page.type` 約束：`html` 型必填 `selector`、`json` 型必填 `path`，缺漏即報錯
+- `article_page` 的欄位設定物件依 `article_page.type` 區分（`html` 型必填 `selector`、`json` 型必填 `path`），混用即報錯
 
 新增或修改網站設定後，可直接執行 `python main.py --site <site_id>`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
 

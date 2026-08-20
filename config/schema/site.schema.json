@@ -5,10 +5,6 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "site_id": {
-      "type": "string",
-      "description": "Identifier injected automatically when loading the config."
-    },
     "name": {
       "type": "string",
       "minLength": 1,
@@ -31,7 +27,7 @@
         "max_pages": {
           "type": "integer",
           "minimum": 1,
-          "description": "Maximum number of list pages to crawl. Takes precedence as a cap over pagination.max_pages."
+          "description": "Maximum number of list pages to crawl. Single authoritative value for page count."
         },
         "stop_on_duplicate": {
           "type": "boolean",
@@ -177,17 +173,7 @@
         },
         "selectors": {
           "type": "object",
-          "description": "Map of output field names to a CSS selector / JSON path (string) or a field configuration object.",
-          "additionalProperties": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/field_config"
-              }
-            ]
-          }
+          "description": "Map of output field names to a CSS selector / JSON path (string) or a field configuration object. The valid field configuration form depends on article_page.type (see the conditional schemas below)."
         }
       },
       "required": ["type"],
@@ -255,10 +241,6 @@
           "type": "boolean"
         },
         "start": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_pages": {
           "type": "integer",
           "minimum": 1
         }
@@ -516,37 +498,6 @@
         "type": "string"
       },
       "description": "Maps raw extracted values to display names, e.g. {'7251': '股市'}."
-    },
-    "field_config": {
-      "description": "Configuration object for a single extracted field.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["text", "datetime", "attr"]
-        },
-        "selector": {
-          "type": "string",
-          "description": "CSS selector (HTML article pages)."
-        },
-        "path": {
-          "type": "string",
-          "description": "JSON path (JSON article pages)."
-        },
-        "attr": {
-          "type": "string",
-          "description": "Attribute to extract. Defaults to 'text'."
-        },
-        "datetime_format": {
-          "type": "string",
-          "description": "strptime format used when type is 'datetime'."
-        },
-        "regex": {
-          "type": "string",
-          "description": "Regular expression applied to the extracted value."
-        }
-      }
     },
     "html_field_config": {
       "description": "Field config for HTML article pages. Requires a CSS selector.",
