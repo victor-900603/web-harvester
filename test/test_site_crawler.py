@@ -62,54 +62,77 @@ class TestBuildListUrl:
         crawler = SiteCrawler(sample_site_config)
         assert crawler._build_list_url(page_num=2) == "https://example.com/news?page=2"
 
-    def test_keyword_uses_search_block(self, sample_site_config):
-        sample_site_config["list_page"]["search"] = {
-            "url": "https://example.com/search?q={keyword}&page={page}",
-        }
+    def test_keyword_uses_keyword_source(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?page={page}"},
+            {"url": "https://example.com/search?q={keyword}&page={page}"},
+        ]
         crawler = SiteCrawler(sample_site_config, keyword="股市")
         assert crawler._build_list_url(page_num=1) == "https://example.com/search?q=股市&page=1"
 
-    def test_keyword_without_search_block_falls_back(self, sample_site_config):
-        sample_site_config["list_page"]["url"] = "https://example.com/news?page={page}"
+    def test_keyword_without_keyword_source_falls_back(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config, keyword="股市")
         assert crawler._build_list_url(page_num=1) == "https://example.com/news?page=1"
 
     def test_category_resolved_through_mapping(self, sample_site_config):
-        sample_site_config["list_page"]["url"] = "https://example.com/news?cat={category}&page={page}"
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?cat={category}&page={page}"},
+        ]
         sample_site_config["list_page"]["categories"] = {"股市": "7251", "政治": "6645"}
         crawler = SiteCrawler(sample_site_config, category="股市")
         assert crawler._build_list_url(page_num=1) == "https://example.com/news?cat=7251&page=1"
 
     def test_category_not_in_mapping_uses_raw_name(self, sample_site_config):
-        sample_site_config["list_page"]["url"] = "https://example.com/news?cat={category}&page={page}"
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?cat={category}&page={page}"},
+        ]
         sample_site_config["list_page"]["categories"] = {"股市": "7251"}
         crawler = SiteCrawler(sample_site_config, category="財經")
         assert crawler._build_list_url(page_num=1) == "https://example.com/news?cat=財經&page=1"
 
     def test_category_default_when_not_given(self, sample_site_config):
-        sample_site_config["list_page"]["url"] = "https://example.com/news?cat={category}&page={page}"
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?cat={category}&page={page}"},
+        ]
         sample_site_config["list_page"]["category_default"] = "0"
         crawler = SiteCrawler(sample_site_config)
         assert crawler._build_list_url(page_num=1) == "https://example.com/news?cat=0&page=1"
 
-    def test_keyword_and_category_combined(self, sample_site_config):
-        sample_site_config["list_page"]["search"] = {
-            "url": "https://example.com/search?q={keyword}&cat={category}&page={page}",
-        }
+    def test_keyword_and_category_exact_match(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?page={page}"},
+            {"url": "https://example.com/search?q={keyword}&cat={category}&page={page}"},
+        ]
         sample_site_config["list_page"]["categories"] = {"股市": "7251"}
         crawler = SiteCrawler(sample_site_config, keyword="台股", category="股市")
         assert crawler._build_list_url(page_num=1) == "https://example.com/search?q=台股&cat=7251&page=1"
 
-    def test_keyword_and_category_unrepresentable_skipped(self, sample_site_config):
-        sample_site_config["list_page"]["search"] = {
-            "url": "https://example.com/search?q={keyword}&page={page}",
-        }
+    def test_keyword_and_category_degrades_to_keyword_source(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?cat={category}&page={page}"},
+            {"url": "https://example.com/search?q={keyword}&page={page}"},
+        ]
         sample_site_config["list_page"]["categories"] = {"股市": "7251"}
         crawler = SiteCrawler(sample_site_config, keyword="台股", category="股市")
-        assert crawler._build_list_url(page_num=1) is None
+        assert crawler._build_list_url(page_num=1) == "https://example.com/search?q=台股&page=1"
+
+    def test_keyword_and_category_degrades_to_category_source(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?cat={category}&page={page}"},
+        ]
+        sample_site_config["list_page"]["categories"] = {"股市": "7251"}
+        crawler = SiteCrawler(sample_site_config, keyword="台股", category="股市")
+        assert crawler._build_list_url(page_num=1) == "https://example.com/news?cat=7251&page=1"
+
+    def test_keyword_prefers_exact_over_superset(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/search?q={keyword}&cat={category}&page={page}"},
+            {"url": "https://example.com/search?q={keyword}&page={page}"},
+        ]
+        crawler = SiteCrawler(sample_site_config, keyword="股市")
+        assert crawler._build_list_url(page_num=1) == "https://example.com/search?q=股市&page=1"
 
     def test_missing_placeholder_left_untouched(self, sample_site_config):
-        sample_site_config["list_page"]["url"] = "https://example.com/news?page={page}"
         crawler = SiteCrawler(sample_site_config)
         assert crawler._build_list_url() == "https://example.com/news?page=1"
 
@@ -155,13 +178,14 @@ class TestParseList:
 
     def test_json_list_yields_requests_with_template(self, sample_site_config):
         sample_site_config["list_page"] = {
-            "url": "https://example.com/api",
             "type": "json",
             "selectors": {
                 "items": "data.articles",
                 "url_field": "slug",
-                "url_template": "https://example.com{url}",
             },
+            "sources": [
+                {"url": "https://example.com/api", "selectors": {"url_template": "https://example.com{url}"}},
+            ],
         }
         crawler = SiteCrawler(sample_site_config)
         resp = make_response(
@@ -173,24 +197,20 @@ class TestParseList:
         assert results[0].url == "https://example.com/a/1"
         assert results[1].url == "https://example.com/a/2"
 
-    def test_search_selectors_override_list_selectors(self, sample_site_config):
+    def test_source_selectors_deep_merge_with_defaults(self, sample_site_config):
         sample_site_config["list_page"] = {
-            "url": "https://example.com/api?page={page}",
             "type": "json",
             "selectors": {
                 "items": "lists",
                 "url_field": "titleLink",
-                "url_template": "https://example.com{url}",
             },
-            "search": {
-                "url": "https://example.com/api?page={page}&q={keyword}",
-                "type": "json",
-                "selectors": {
-                    "items": "lists",
-                    "url_field": "titleLink",
-                    "url_template": "{url}",
+            "sources": [
+                {"url": "https://example.com/api?page={page}"},
+                {
+                    "url": "https://example.com/api?page={page}&q={keyword}",
+                    "selectors": {"url_template": "{url}"},
                 },
-            },
+            ],
         }
         crawler = SiteCrawler(sample_site_config, keyword="股市")
         resp = make_response(

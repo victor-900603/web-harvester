@@ -104,7 +104,7 @@ python main.py --site your_site
 
 ### 關鍵字搜尋與分類篩選
 
-若站點設定提供 `list_page.search` 與 `list_page.categories`，可搭配 `--keyword` / `--category` 使用：
+若站點設定提供 `list_page.sources` 與 `list_page.categories`，可搭配 `--keyword` / `--category` 使用：
 
 ```bash
 python main.py --site udn_news --keyword 台股
@@ -152,28 +152,33 @@ request:
     Referer: "https://example.com"
 
 list_page:
-  url: "https://example.com/news?page={page}"
   method: "GET"            # GET | POST，列表請求方法（預設 GET）
-  type: "html"             # html | json
+  type: "html"             # html | json（list_page 層為來源的繼承預設）
   categories:              # 選用：分類名稱 → 站內 URL 值
     "股市": "7251"
     "政治": "6645"
   category_default: "0"    # 選用：未指定 --category 時 {category} 的填值
-  search:                  # 選用：關鍵字搜尋入口，--keyword 指定時覆蓋上述 url/type/selectors/method/pagination
-    url: "https://example.com/search?q={keyword}&page={page}"
-    type: "html"
-    selectors:
-      items: "article.news-item"
-      link: "a"
-      link_attr: "href"
-  selectors:
+  selectors:               # 選用：來源的繼承預設（items/link/link_attr/url_field/url_template）
     items: "article.news-item"
     link: "a"
     link_attr: "href"
-  pagination:
+  pagination:              # 選用：來源的繼承預設
     enabled: true
     start: 1
     max_pages: 5
+  sources:                 # 必填：至少一個列表來源，URL 內可含 {page}/{keyword}/{category} 佔位符
+    - url: "https://example.com/news?page={page}&cat={category}"   # 預設來源（不含 {keyword}）
+      type: "html"
+      selectors:
+        items: "article.news-item"
+        link: "a"
+        link_attr: "href"
+    - url: "https://example.com/search?q={keyword}&page={page}"    # 關鍵字來源（含 {keyword}）
+      type: "html"
+      selectors:
+        items: "article.news-item"
+        link: "a"
+        link_attr: "href"
 
 article_page:
   type: "html"
@@ -315,7 +320,7 @@ tags:
 
 ### 佔位符
 
-`list_page.url` 與 `list_page.search.url` 都支援三種佔位符：
+每個 `list_page.sources[*].url` 都支援三種佔位符：
 
 | 佔位符 | 來源 | 說明 |
 |--------|------|------|
@@ -323,11 +328,20 @@ tags:
 | `{keyword}` | `--keyword` | 未提供時填空字串 |
 | `{category}` | `--category` | 查 `categories` 對應表填站內值；未提供時填 `category_default`（缺省空字串） |
 
+### 來源選擇
+
+爬蟲依「來源 URL 內實際出現的佔位符」判斷該來源支援哪些篩選，再依請求的 `--keyword` / `--category` 選擇來源，永遠優雅降級、不中斷爬取：
+
+- **精確匹配**：有來源恰好支援所有請求的篩選（如兩者皆含 `{keyword}` 與 `{category}`）→ 優先採用。
+- **超集**：無精確來源時，採用含 `{keyword}` 的來源（記 warning 忽略 `--category`）；再無則採用含 `{category}` 的來源（記 warning 忽略 `--keyword`）。
+- **降級**：單一篩選請求會優先挑「不含另一個佔位符」的精確來源，避免帶出多餘篩選。
+- **預設來源**：都不符合時回退到第一個不含 `{keyword}` 的來源（純列表、支援 `--category` 或兩者皆無）。
+
 ### 行為規則
 
-- 有 `--keyword` 且站點設了 `list_page.search` → 以 `search` 區塊覆蓋 `list_page` 的 url/type/selectors/method/pagination 作為列表模板；未設 `search` 則記 warning 回退用 `list_page.url`。
+- 單一來源的 `method`/`type`/`pagination` 直接覆蓋 list_page 層預設；`selectors` 為深合併（來源只需覆蓋 `url_template` 即可，`items`/`url_field` 等繼承 list_page 層）。
 - 有 `--category` → 以名稱查 `categories` 表取得站內值；名稱不在表中記 warning 改用原始名稱。
-- 同時指定 `--keyword` 與 `--category` → 模板須同時含 `{keyword}` 與 `{category}` 兩個佔位符，否則記 error 並跳過該頁（不中斷整體爬取）。
+- 同時指定 `--keyword` 與 `--category` 且無來源支援兩者 → 自動降級（關鍵字優先），不再整頁跳過。
 
 ## 新增網站
 

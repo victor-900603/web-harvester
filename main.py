@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-k",
         "--keyword",
         metavar="KW",
-        help="關鍵字搜尋（需站點設定 search）",
+        help="關鍵字搜尋（需站點設定 sources）",
     )
     parser.add_argument(
         "-c",

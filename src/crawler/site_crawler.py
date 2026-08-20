@@ -39,43 +39,127 @@ class SiteCrawler(BaseCrawler):
         self._classifier = Classifier(site_config, category_normalization)
         self._keyword = keyword
         self._category = category
+        self._selected_list_cfg: Optional[Dict[str, Any]] = None
 
     @property
     def limits(self) -> dict:
         """Site-level crawl limits from the configuration."""
         return self._limits
 
-    def _effective_list_cfg(self) -> Dict[str, Any]:
-        """Return the list_page config to use, with ``search`` overriding when searching.
+    def _select_list_cfg(self) -> Dict[str, Any]:
+        """Return the list_page config to use for the requested keyword/category.
 
-        When a keyword is given and a ``search`` block is configured, the search
-        block's url/type/selectors/method/pagination override the corresponding
-        list_page fields. Otherwise the plain list_page config is returned.
+        Sources are matched against the requested filters (keyword/category). A
+        source "supports" a filter when its URL contains the matching placeholder.
+        Matching precedence:
+          1. exact match - the source supports exactly the requested filters
+          2. superset    - the source supports all requested filters (and more)
+          3. degradation - keep the keyword-supporting source (dropping category)
+                          if none, keep a category-supporting source (dropping keyword)
+                          if none, fall back to the default source
+        The default source is the first one without a {keyword} placeholder.
+        This is a pure function of (keyword, category): parse_list re-derives the
+        same source when parsing a response without needing request meta.
         """
-        cfg = self._list_cfg
-        if self._keyword:
-            search = cfg.get("search")
-            if search:
-                effective = dict(cfg)
-                effective.update(search)
-                return effective
-            logger.warning("Keyword search requested but 'search' is not configured; falling back to base list page.")
-        return cfg
+        if self._selected_list_cfg is not None:
+            return self._selected_list_cfg
+        sources = self._list_cfg.get("sources", [])
+        if not sources:
+            logger.warning("'list_page.sources' is empty; using an empty list config.")
+            self._selected_list_cfg = dict(self._list_cfg)
+            return self._selected_list_cfg
+
+        def supports(src: Dict[str, Any], token: str) -> bool:
+            return "{" + token + "}" in src.get("url", "")
+
+        def has_keyword(src: Dict[str, Any]) -> bool:
+            return supports(src, "keyword")
+
+        def has_category(src: Dict[str, Any]) -> bool:
+            return supports(src, "category")
+
+        def defaults_of(src: Dict[str, Any]) -> Dict[str, Any]:
+            base = {k: v for k, v in self._list_cfg.items() if k in ("method", "type", "selectors", "pagination")}
+            merged = dict(base)
+            for key in ("method", "type", "pagination"):
+                if key in src:
+                    merged[key] = src[key]
+            if "selectors" in src:
+                base_selectors = dict(base.get("selectors", {}))
+                base_selectors.update(src["selectors"])
+                merged["selectors"] = base_selectors
+            merged["url"] = src["url"]
+            return merged
+
+        default = next((s for s in sources if not has_keyword(s)), sources[0])
+
+        keyword = self._keyword
+        category = self._category
+
+        if keyword and category:
+            exact = next((s for s in sources if has_keyword(s) and has_category(s)), None)
+            if exact:
+                result = defaults_of(exact)
+            else:
+                kw_source = next((s for s in sources if has_keyword(s)), None)
+                if kw_source:
+                    logger.warning(
+                        "Keyword and category requested but no source supports both; "
+                        "using a keyword source and ignoring --category."
+                    )
+                    result = defaults_of(kw_source)
+                else:
+                    cat_source = next((s for s in sources if has_category(s)), None)
+                    if cat_source:
+                        logger.warning(
+                            "Keyword and category requested but no source supports both; "
+                            "using a category source and ignoring --keyword."
+                        )
+                        result = defaults_of(cat_source)
+                    else:
+                        logger.warning("Neither keyword nor category is supported by any source; using the default list.")
+                        result = defaults_of(default)
+        elif keyword:
+            exact = next((s for s in sources if has_keyword(s) and not has_category(s)), None)
+            if exact:
+                result = defaults_of(exact)
+            else:
+                source = next((s for s in sources if has_keyword(s)), None)
+                if source:
+                    result = defaults_of(source)
+                else:
+                    logger.warning("Keyword search requested but no source supports {keyword}; using the default list.")
+                    result = defaults_of(default)
+        elif category:
+            exact = next((s for s in sources if has_category(s) and not has_keyword(s)), None)
+            if exact:
+                result = defaults_of(exact)
+            else:
+                source = next((s for s in sources if has_category(s)), None)
+                if source:
+                    result = defaults_of(source)
+                else:
+                    logger.warning("Category requested but no source supports {category}; using the default list.")
+                    result = defaults_of(default)
+        else:
+            result = defaults_of(default)
+        self._selected_list_cfg = result
+        return result
 
     def _build_list_url(self, page_num: Optional[int] = None) -> Optional[str]:
         """Build a list page URL, filling {page}, {keyword} and {category} placeholders.
 
         ``category`` is resolved through the ``categories`` mapping (name ->
-        in-site value). When a template cannot express both keyword and category,
-        an error is logged and None is returned.
+        in-site value). Unsupported requested filters are dropped with a warning
+        instead of aborting the crawl.
         """
         keyword = self._keyword
         category_name = self._category
-        cfg = self._effective_list_cfg()
+        cfg = self._select_list_cfg()
 
         template = cfg.get("url", self.base_url)
 
-        categories = cfg.get("categories", {})
+        categories = self._list_cfg.get("categories", {})
         category_value = ""
         if category_name:
             category_value = categories.get(category_name)
@@ -85,13 +169,7 @@ class SiteCrawler(BaseCrawler):
                 )
                 category_value = category_name
         elif "{category}" in template:
-            category_value = cfg.get("category_default", "")
-
-        if keyword and category_name and not ("{keyword}" in template and "{category}" in template):
-            logger.error(
-                "Both keyword and category were given, but the list URL template cannot express them; skipping."
-            )
-            return None
+            category_value = self._list_cfg.get("category_default", "")
 
         values = _FormatDict(
             keyword=keyword or "",
@@ -106,7 +184,7 @@ class SiteCrawler(BaseCrawler):
 
     def start_requests(self) -> Generator[Request, None, None]:
         """Generate initial requests to start crawling the site."""
-        cfg = self._effective_list_cfg()
+        cfg = self._select_list_cfg()
         pagination = cfg.get("pagination", {})
         method = cfg.get("method", "GET")
 
@@ -162,7 +240,7 @@ class SiteCrawler(BaseCrawler):
             logger.warning(f"List page returned non-OK status {response.status_code}: {response.url}")
             return
 
-        cfg = self._effective_list_cfg()
+        cfg = self._select_list_cfg()
         list_type = cfg.get("type", "html")
         selectors = cfg.get("selectors", {})
         headers = self._request_cfg.get("headers", {})

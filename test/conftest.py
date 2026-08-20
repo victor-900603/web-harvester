@@ -43,10 +43,12 @@ def sample_site_config() -> dict:
             "cookies": {},
         },
         "list_page": {
-            "url": "https://example.com/news?page={page}",
             "type": "html",
             "selectors": {"items": "article.news-item", "link": "a", "link_attr": "href"},
             "pagination": {"enabled": True, "start": 1, "max_pages": 3},
+            "sources": [
+                {"url": "https://example.com/news?page={page}"},
+            ],
         },
         "article_page": {
             "type": "html",

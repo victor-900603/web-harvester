@@ -101,52 +101,56 @@
     "list_page": {
       "type": "object",
       "additionalProperties": false,
+      "description": "List page configuration. Multiple named list sources (sources) provide distinct URL templates; a source can express a filter (keyword/category) if its URL contains the matching placeholder. Fields defined at this level (method/type/selectors/pagination) act as defaults inherited by every source unless overridden.",
       "properties": {
-        "url": {
-          "type": "string",
-          "minLength": 1,
-          "description": "List page URL. May contain a {page} placeholder for pagination."
-        },
         "method": {
           "type": "string",
-          "enum": ["GET", "POST"]
+          "enum": ["GET", "POST"],
+          "description": "Default request method inherited by all sources."
         },
         "type": {
           "type": "string",
-          "enum": ["html", "json"]
+          "enum": ["html", "json"],
+          "description": "Default response type inherited by all sources."
         },
         "selectors": {
-          "$ref": "#/$defs/list_selectors"
+          "$ref": "#/$defs/list_selectors",
+          "description": "Default list selectors inherited by all sources; deep-merged with a source's own selectors."
         },
         "pagination": {
-          "$ref": "#/$defs/pagination"
+          "$ref": "#/$defs/pagination",
+          "description": "Default pagination inherited by all sources."
         },
-        "search": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Optional keyword-search settings. When --keyword is given and this block is present, it overrides the corresponding list_page fields.",
-          "properties": {
-            "url": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Keyword-search list URL. May contain {keyword}, {category} and {page} placeholders."
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "description": "List URL template. May contain {page}, {keyword} and {category} placeholders; each present placeholder declares the filter the source supports."
+              },
+              "method": {
+                "type": "string",
+                "enum": ["GET", "POST"]
+              },
+              "type": {
+                "type": "string",
+                "enum": ["html", "json"]
+              },
+              "selectors": {
+                "$ref": "#/$defs/list_selectors_partial"
+              },
+              "pagination": {
+                "$ref": "#/$defs/pagination"
+              }
             },
-            "method": {
-              "type": "string",
-              "enum": ["GET", "POST"]
-            },
-            "type": {
-              "type": "string",
-              "enum": ["html", "json"]
-            },
-            "selectors": {
-              "$ref": "#/$defs/list_selectors"
-            },
-            "pagination": {
-              "$ref": "#/$defs/pagination"
-            }
+            "required": ["url"]
           },
-          "required": ["url"]
+          "description": "Ordered list of list URL templates. The first source without a {keyword} placeholder is the default list; keyword/category requests pick the best matching source (exact match first, then superset, then graceful degradation)."
         },
         "categories": {
           "type": "object",
@@ -161,7 +165,7 @@
           "description": "Optional default value for the {category} placeholder when --category is not given."
         }
       },
-      "required": ["url", "type"]
+      "required": ["sources"]
     },
     "article_page": {
       "type": "object",
@@ -305,6 +309,33 @@
           "required": ["items", "url_field"]
         }
       ]
+    },
+    "list_selectors_partial": {
+      "description": "Partial list selectors override within a list source. Deep-merged over the list_page-level selectors, so only the fields being overridden need to be present.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "string",
+          "description": "CSS selector or JSON path for the container of each list item."
+        },
+        "link": {
+          "type": "string",
+          "description": "CSS selector for the link element within an item."
+        },
+        "link_attr": {
+          "type": "string",
+          "description": "Attribute to read the link URL from (default: href)."
+        },
+        "url_field": {
+          "type": "string",
+          "description": "Field name holding the article URL within each item."
+        },
+        "url_template": {
+          "type": "string",
+          "description": "URL template with a {url} placeholder used to build the final URL."
+        }
+      }
     },
     "classifier_source": {
       "description": "A single classification source. The 'type' field selects the extraction strategy; 'mapping' optionally translates raw values into display names.",
