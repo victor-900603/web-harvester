@@ -31,7 +31,7 @@ main.py → Settings (config/settings.yaml) → setup_logging
   - `max_items`：收集達標即停止
   - `stop_on_duplicate`：遇到重複 URL 即停止；未開啟則跳過繼續
   - `timeout`：整體爬取逾時（秒）
-  - `max_pages`：蓋住 `list_page.pagination.max_pages`
+  - `max_pages`：爬取列表頁數上限（唯一權威值，`pagination` 只管 `enabled`/`start`）
 
 ## 已知陷阱
 

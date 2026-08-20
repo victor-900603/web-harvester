@@ -40,10 +40,10 @@ list_page:
   #   url_template: "https://example.com{url}"
 
   # Pagination settings to control how many pages to crawl and where to start.
+  # The page count is controlled by the limits.max_pages field.
   pagination:
     enabled: true
     start: 1
-    max_pages: 5
 
   # 分類名稱對應站內值，供 --category 篩選使用（可選）
   # categories:
