@@ -1,6 +1,6 @@
 # 網站設定說明
 
-本站點設定檔位於 `config/sites/<name>.yaml`，由 `config/schema/site.schema.json` 嚴格驗證。
+本站點設定檔位於 `config/sites/<name>.yaml`，由 `config/schema/site.schema.json` 嚴格驗證。全域 `limits` 與覆寫規則請見 [global-config.md](global-config.md)。
 
 ## 最小範例
 
@@ -67,7 +67,7 @@ article_page:
 
 ## 爬取限制（limits）
 
-三層優先權（逐欄位、高優先權覆寫）：**CLI 參數 > 站點 `limits`（選用）> 全域 `limits`（`config/settings.yaml`）> 程式碼預設**。
+三層優先權與 CLI 覆寫詳見 [global-config.md](global-config.md)。站點 `limits` 為選用覆寫，欄位如下：
 
 | 欄位 | 說明 |
 |------|------|
@@ -75,8 +75,6 @@ article_page:
 | `max_pages` | 爬取列表頁數上限（唯一權威值，`pagination` 只管 `enabled`/`start`） |
 | `stop_on_duplicate` | 遇到重複 URL 即停止；未開啟則跳過繼續 |
 | `timeout` | 整體爬取逾時（秒） |
-
-CLI 可臨時覆寫：`--max-items` / `--max-pages` / `--stop-on-duplicate`（與 `--no-stop-on-duplicate`）/ `--timeout`。
 
 ## 支援的 Selector 類型
 
@@ -92,7 +90,7 @@ Selector 亦支援 `regex` 欄位，對擷取結果進行正規表達式比對�
 
 所有設定檔在載入時會透過 [JSON Schema](https://json-schema.org/) 進行嚴格驗證，欄位打錯或型別不符時會在載入階段直接拋出 `ConfigValidationError`，避免錯誤設定靜默進入執行階段。
 
-- `config/schema/settings.schema.json`：驗證 `config/settings.yaml`
+- `config/schema/settings.schema.json`：驗證 `config/settings.yaml`（詳見 [global-config.md](global-config.md)、[logging.md](logging.md)、[storage.md](storage.md)）
 - `config/schema/site.schema.json`：驗證 `config/sites/*.yaml`
 
 驗證內容包含：
