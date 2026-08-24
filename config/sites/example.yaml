@@ -1,82 +1,49 @@
 # ============================================================
-# Example Site Configuration
+# 範例網站設定 - 最小可用範例
+# 完整欄位說明請見 docs/site-config.md
+# Schema 定義請見 config/schema/site.schema.json
 # ============================================================
-# Configuration for a news website. This file defines how to crawl and parse the site.
-# You can customize the settings according to the structure of the target website.
 
 name: "example"
 base_url: "https://example.com"
 
-# Limits for crawling and data collection.
-limits:
-  max_items: 50
-  max_pages: 5
-  stop_on_duplicate: false
+# 站點未設定 limits 時，繼承 config/settings.yaml 的全域 limits
+# 三層優先權：CLI 參數 > 本檔 limits（選用）> 全域 limits
+# 需覆寫時再加入：
+# limits:
+#   max_items: 50
+#   max_pages: 5
+#   stop_on_duplicate: false
+#   timeout: 300
 
-  timeout: 300
-
-# HTTP request settings, including headers and cookies.
+# 站點請求設定（僅套用於本站）
 request:
   headers:
     Referer: "https://example.com"
-  cookies: {}
 
-# List page configuration: how to find article links and handle pagination.
-# Fields at this level (type/selectors/pagination) are defaults inherited by
-# every entry in `sources` unless a source overrides them.
+# 列表頁設定
 list_page:
-  type: "html"                # html | json
+  type: "html"
 
-  # HTML selectors to extract article links from the list page.
+  # 擷取文章連結的選擇器
   selectors:
     items: "article.news-item"
     link: "a"
     link_attr: "href"
 
-  # JSON selectors to extract article links if the list page returns JSON.
-  # selectors:
-  #   items: "data.articles"
-  #   url_field: "url"
-  #   url_template: "https://example.com{url}"
-
-  # Pagination settings to control how many pages to crawl and where to start.
-  # The page count is controlled by the limits.max_pages field.
+  # 分頁設定（頁數上限由 limits.max_pages 控制）
   pagination:
     enabled: true
     start: 1
 
-  # 分類名稱對應站內值，供 --category 篩選使用（可選）
-  # categories:
-  #   "財經": "business"
-  #   "科技": "tech"
-  # category_default: "business"
-
-  # 列表來源清單（依優先序排列）。來源支援哪些篩選由其 URL 內實際出現的
-  # 佔位符決定：{keyword} 支援關鍵字、{category} 支援分類。
-  # 第一個不含 {keyword} 的來源為預設列表。
+  # 列表來源（至少一個，URL 可含 {page}/{keyword}/{category} 佔位符）
   sources:
     - url: "https://example.com/news?page={page}"
-      # 可在此覆蓋 type/selectors/pagination（其餘繼承 list_page 預設）
-      # type: "html"
-      # selectors:
-      #   items: "article.news-item"
 
-    # 關鍵字搜尋來源（可選）：--keyword 指定時使用，URL 含 {keyword}
-    # - url: "https://example.com/search?q={keyword}&page={page}"
-    #   type: "html"
-    #   selectors:
-    #     items: "article.news-item"
-    #     link: "a"
-    #     link_attr: "href"
-
-    # 關鍵字＋分類組合來源（可選）：URL 同時含 {keyword} 與 {category}，
-    # 兩者都指定時優先採用；不可組合的站則不要提供此來源
-    # - url: "https://example.com/search?q={keyword}&cat={category}&page={page}"
-
+# 文章頁設定
 article_page:
-  type: "html"                # html | json
+  type: "html"
 
-  # HTML selectors to extract article details from the article page.
   selectors:
     title: "h1.article-title"
 
@@ -95,46 +62,3 @@ article_page:
       type: "text"
       selector: "span.author-name"
       attr: "text"
-
-    url:
-      type: "text"
-      selector: "link[rel='canonical']"
-      attr: "href"
-
-  # JSON selectors to extract article details if the article page returns JSON.
-  # selectors:
-  #   title: "data.title"
-  #   content: "data.content"
-  #   published_at: "data.publish_date"
-  #   author: "data.author"
-  #   url: "data.url"
-
-# Optional article classification. Sources are tried in order; the first one
-# yielding a non-empty value wins, otherwise `default` is used.
-# category:
-#   sources:
-#     - type: "meta"
-#       name: "section"
-#
-#     - type: "selector"
-#       selector: "a.breadcrumb-item"
-#       attr: "text"
-#       join: ">"
-#
-#     - type: "url"
-#       regex: "/story/(\\d+)/"
-#       mapping:
-#         "7251": "股市"
-#
-#     - type: "keyword"
-#       rules:
-#         - keywords: ["台股", "股市"]
-#           value: "財經"
-#   default: "其他"
-#
-# Optional auto-tagging. Values from all sources are accumulated.
-# tags:
-#   sources:
-#     - type: "meta"
-#       name: "news_keywords"
-#       split: ","
