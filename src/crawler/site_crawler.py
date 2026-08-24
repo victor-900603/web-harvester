@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 
 from ..core import Item, Request, Response
 from ..parsers import HTMLParser, JSONParser
+from ..utils.config import merge_limits
 
 from .base import BaseCrawler
 from .classifier import Classifier
@@ -28,6 +29,8 @@ class SiteCrawler(BaseCrawler):
         category_normalization: Optional[Dict[str, str]] = None,
         keyword: Optional[str] = None,
         category: Optional[str] = None,
+        default_limits: Optional[Dict[str, Any]] = None,
+        limit_overrides: Optional[Dict[str, Any]] = None,
     ):
         self._config = site_config
         self.name = site_config.get("name", "unknown")
@@ -35,7 +38,11 @@ class SiteCrawler(BaseCrawler):
         self._list_cfg = site_config.get("list_page", {})
         self._article_cfg = site_config.get("article_page", {})
         self._request_cfg = site_config.get("request", {})
-        self._limits = site_config.get("limits", {})
+        self._limits = merge_limits(
+            default_limits,
+            site_config.get("limits"),
+            limit_overrides,
+        )
         self._classifier = Classifier(site_config, category_normalization)
         self._keyword = keyword
         self._category = category

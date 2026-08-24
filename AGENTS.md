@@ -4,7 +4,7 @@
 
 ## 開發指令
 
-- 執行：`python main.py --site <site_id>`（在專案根目錄執行；路徑皆為相對根目錄）；`python main.py --list-sites` 列出可用站點；選用 `--keyword <kw>` 關鍵字搜尋、`--category <名稱>` 分類篩選（可組合，需站點設定 `sources`/`categories`）
+- 執行：`python main.py --site <site_id>`（在專案根目錄執行；路徑皆為相對根目錄）；`python main.py --list-sites` 列出可用站點；選用 `--keyword <kw>` 關鍵字搜尋、`--category <名稱>` 分類篩選（可組合，需站點設定 `sources`/`categories`）；`--max-items`/`--max-pages`/`--stop-on-duplicate`(與 `--no-stop-on-duplicate`)/`--timeout` 可臨時覆寫 limits（本次執行生效）
 - venv：`.venv`（Python 3.11），啟動：`.venv\Scripts\Activate.ps1`
 - 測試：`python -m pytest test`（pytest 於 requirements.txt）；engine 測試用 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 跳過真實網路，storage 測試用 pytest `tmp_path`
 - 無 lint / formatter / typecheck 設定，改完直接跑測試 + `python main.py --site <site_id>`
@@ -13,7 +13,7 @@
 
 ```
 main.py → Settings (config/settings.yaml) → setup_logging
-        → load_site_config(--site 指定的站點) → build_engine(settings) → SiteCrawler(site_config) → engine.run(crawler)
+        → load_site_config(--site 指定的站點) → build_engine(settings) → SiteCrawler(site_config, default_limits=settings.limits, limit_overrides=CLI) → engine.run(crawler)
 ```
 
 - 換目標網站：`python main.py --site <site_id>`（site yaml 檔名不含副檔名），在 `config/sites/<name>.yaml` 新增對應設定
@@ -27,11 +27,12 @@ main.py → Settings (config/settings.yaml) → setup_logging
 - 所有 YAML 載入時以 `config/schema/` 下的 JSON Schema 嚴格驗證（fail-fast，`additionalProperties: false`），違規拋 `ConfigValidationError`（src/utils/config.py:28）
 - 修改或新增 config 欄位時，必須同步更新對應 schema（settings.schema.json / site.schema.json），否則載入直接失敗
 - `list_page` required 為 `["sources"]`；`sources[*]` 用 `$defs/list_selectors_partial`（部分 selectors，無 required），list_page 層 selectors 用完整 `list_selectors`（oneOf 表單）
-- site `limits` 語意（同步/非同步都支援）：
+- `limits` 語意（同步/非同步都支援），最終值採三層合併（`src/utils/config.py:merge_limits`，後者覆寫、略過 None）：**CLI 參數（`build_cli_limits`，main.py）> site `limits`（選用覆寫）> settings `limits`（全域預設，`config/settings.yaml`）> 程式碼預設**：
   - `max_items`：收集達標即停止
   - `stop_on_duplicate`：遇到重複 URL 即停止；未開啟則跳過繼續
   - `timeout`：整體爬取逾時（秒）
   - `max_pages`：爬取列表頁數上限（唯一權威值，`pagination` 只管 `enabled`/`start`）
+  - 合併於 `SiteCrawler.__init__`（`default_limits` / `limit_overrides` 參數）
 
 ## 已知陷阱
 
