@@ -28,7 +28,10 @@ web-harvester/
 │       ├── example.yaml    # 範例網站設定
 │       └── udn_news.yaml   # 聯合新聞網設定
 ├── docs/
-│   └── site-config.md      # 網站設定完整說明
+│   ├── site-config.md      # 網站設定完整說明
+│   ├── global-config.md    # 全域設定完整說明
+│   ├── logging.md          # 日誌設定說明
+│   └── storage.md          # 儲存設定說明
 ├── src/
 │   ├── core/               # 核心引擎（Engine、Request、Response、Item）
 │   ├── crawler/            # 爬蟲邏輯（BaseCrawler、SiteCrawler）
@@ -114,51 +117,13 @@ python main.py --site udn_news --category 股市
 python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 ```
 
-`--category` 傳站內分類「名稱」，由 `categories` 對應表轉成站內實際值；名稱不在表中時改用原始名稱。詳見下方「搜尋與篩選」小節。
-
-### 以指令覆寫爬取限制（limits）
-
-可透過 CLI 參數臨時覆寫爬取限制（僅本次執行生效，不寫回設定檔），適用於所有站點：
-
-```bash
-python main.py --site udn_news --max-items 50
-python main.py --site udn_news --max-pages 5 --timeout 120
-python main.py --site udn_news --no-stop-on-duplicate
-```
-
-| 參數 | 覆寫欄位 | 說明 |
-|------|---------|------|
-| `--max-items N` | `limits.max_items` | 收集達 N 筆即停止（>= 1） |
-| `--max-pages N` | `limits.max_pages` | 爬取列表頁數上限（>= 1） |
-| `--stop-on-duplicate` / `--no-stop-on-duplicate` | `limits.stop_on_duplicate` | 遇到重複 URL 是否停止 |
-| `--timeout SEC` | `limits.timeout` | 整體爬取逾時（秒，> 0） |
-
-爬取限制的最終值採「逐欄位、高優先權覆寫」的三層合併：**CLI 參數 > 站點 `limits`（選用）> 全域 `limits`（`config/settings.yaml`）> 程式碼預設**。未指定的欄位沿用較低層的值。
+`--category` 傳站內分類「名稱」，由 `categories` 對應表轉成站內實際值；名稱不在表中時改用原始名稱。分類與篩選詳見 [docs/site-config.md](docs/site-config.md)，爬取限制覆寫詳見 [docs/global-config.md](docs/global-config.md)。
 
 ## 設定說明
 
 ### 全域設定（`config/settings.yaml`）
 
-| 欄位 | 說明 | 預設值 |
-|------|------|--------|
-| `engine.mode` | 執行模式（`sync` / `async`） | `sync` |
-| `engine.max_concurrency` | 非同步模式最大並行數 | `10` |
-| `engine.request_timeout` | 請求逾時（秒） | `30` |
-| `engine.download_delay` | 同一網域請求間隔（秒） | `1.0` |
-| `engine.max_retries` | 失敗請求最大重試次數 | `3` |
-| `request.user_agent` | 全域請求的 User-Agent | `web-harvester/1.0` |
-| `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
-| `limits.max_items` | 各站全域預設：最大爬取筆數，達到即停止 | `100` |
-| `limits.max_pages` | 各站全域預設：最大爬取頁數上限 | `3` |
-| `limits.stop_on_duplicate` | 各站全域預設：遇到重複 URL 即停止 | `false` |
-| `limits.timeout` | 各站全域預設：整體爬取時間上限（秒） | `180` |
-| `category_normalization` | 跨站分類統一對應表（原始名 → 統一值，定義於 `config/category_normalization.yaml`） | `{}` |
-| `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
-| `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
-| `database.enabled` | 是否啟用資料庫儲存 | `true` |
-| `database.url` | 資料庫連線字串 | `sqlite:///data/articles.db` |
-| `database.pool_size` | 連線池大小（僅非 SQLite backend 生效） | `5` |
-| `database.max_overflow` | 連線池溢位上限（僅非 SQLite backend 生效） | `10` |
+完整欄位與範例請見 [docs/global-config.md](docs/global-config.md)、[docs/logging.md](docs/logging.md) 與 [docs/storage.md](docs/storage.md)。
 
 ### 網站設定（`config/sites/<name>.yaml`）
 
