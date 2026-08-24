@@ -114,6 +114,25 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 
 `--category` 傳站內分類「名稱」，由 `categories` 對應表轉成站內實際值；名稱不在表中時改用原始名稱。詳見下方「搜尋與篩選」小節。
 
+### 以指令覆寫爬取限制（limits）
+
+可透過 CLI 參數臨時覆寫爬取限制（僅本次執行生效，不寫回設定檔），適用於所有站點：
+
+```bash
+python main.py --site udn_news --max-items 50
+python main.py --site udn_news --max-pages 5 --timeout 120
+python main.py --site udn_news --no-stop-on-duplicate
+```
+
+| 參數 | 覆寫欄位 | 說明 |
+|------|---------|------|
+| `--max-items N` | `limits.max_items` | 收集達 N 筆即停止（>= 1） |
+| `--max-pages N` | `limits.max_pages` | 爬取列表頁數上限（>= 1） |
+| `--stop-on-duplicate` / `--no-stop-on-duplicate` | `limits.stop_on_duplicate` | 遇到重複 URL 是否停止 |
+| `--timeout SEC` | `limits.timeout` | 整體爬取逾時（秒，> 0） |
+
+爬取限制的最終值採「逐欄位、高優先權覆寫」的三層合併：**CLI 參數 > 站點 `limits`（選用）> 全域 `limits`（`config/settings.yaml`）> 程式碼預設**。未指定的欄位沿用較低層的值。
+
 ## 設定說明
 
 ### 全域設定（`config/settings.yaml`）
@@ -127,6 +146,10 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 | `engine.max_retries` | 失敗請求最大重試次數 | `3` |
 | `request.user_agent` | 全域請求的 User-Agent | `web-harvester/1.0` |
 | `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
+| `limits.max_items` | 各站全域預設：最大爬取筆數，達到即停止 | `100` |
+| `limits.max_pages` | 各站全域預設：最大爬取頁數上限 | `3` |
+| `limits.stop_on_duplicate` | 各站全域預設：遇到重複 URL 即停止 | `false` |
+| `limits.timeout` | 各站全域預設：整體爬取時間上限（秒） | `180` |
 | `category_normalization` | 跨站分類統一對應表（原始名 → 統一值，定義於 `config/category_normalization.yaml`） | `{}` |
 | `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
 | `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
@@ -141,11 +164,11 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 name: "網站名稱"
 base_url: "https://example.com"
 
-limits:
-  max_items: 50          # 最大爬取筆數，達到即停止
-  max_pages: 5           # 最大爬取頁數上限（唯一權威值，pagination 不再管頁數）
-  stop_on_duplicate: true  # 遇到重複 URL 即停止
-  timeout: 300           # 整體爬取時間上限（秒）
+limits:                        # 選用：各站覆寫全域 limits（config/settings.yaml）
+  max_items: 50                # 最大爬取筆數，達到即停止
+  max_pages: 5                 # 最大爬取頁數上限（唯一權威值，pagination 不再管頁數）
+  stop_on_duplicate: true      # 遇到重複 URL 即停止
+  timeout: 300                 # 整體爬取時間上限（秒）
 
 request:
   headers:

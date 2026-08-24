@@ -93,7 +93,13 @@ class TestMain:
         assert captured["crawler"] == (
             "crawler",
             {"name": "example"},
-            {"category_normalization": None, "keyword": None, "category": None},
+            {
+                "category_normalization": None,
+                "keyword": None,
+                "category": None,
+                "default_limits": None,
+                "limit_overrides": {},
+            },
         )
 
     def test_keyword_and_category_passed_to_crawler(self, monkeypatch):
@@ -130,7 +136,13 @@ class TestMain:
         assert captured["crawler"] == (
             "crawler",
             {"name": "example"},
-            {"category_normalization": None, "keyword": "股市", "category": "財經"},
+            {
+                "category_normalization": None,
+                "keyword": "股市",
+                "category": "財經",
+                "default_limits": None,
+                "limit_overrides": {},
+            },
         )
 
     def test_unknown_site_errors(self, monkeypatch, capsys):

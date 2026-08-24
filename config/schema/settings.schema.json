@@ -59,6 +59,31 @@
         }
       }
     },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_items": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of items to collect before stopping."
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of list pages to crawl. Single authoritative value for page count."
+        },
+        "stop_on_duplicate": {
+          "type": "boolean",
+          "description": "Stop crawling when a duplicate URL is encountered."
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Overall crawl timeout in seconds."
+        }
+      }
+    },
     "category_normalization": {
       "type": "object",
       "additionalProperties": {

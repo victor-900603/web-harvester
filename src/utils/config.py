@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import yaml
 from jsonschema import FormatChecker, ValidationError, validate
@@ -18,6 +18,23 @@ DEFAULT_CATEGORY_NORMALIZATION_PATH = os.path.join("config", "category_normaliza
 
 class ConfigValidationError(ValueError):
     """Raised when a configuration file fails schema validation."""
+
+
+def merge_limits(*sources: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Merge limit mappings, with later sources taking precedence.
+
+    None values are skipped so an absent key does not overwrite an earlier one.
+    Sources are typically (highest priority last): settings defaults, site
+    limits, CLI overrides.
+    """
+    merged: Dict[str, Any] = {}
+    for source in sources:
+        if not source:
+            continue
+        for key, value in source.items():
+            if value is not None:
+                merged[key] = value
+    return merged
 
 
 def _load_schema(schema_path: str) -> dict:

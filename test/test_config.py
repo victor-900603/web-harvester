@@ -9,6 +9,7 @@ from src.utils.config import (
     DEFAULT_SITE_SCHEMA,
     Settings,
     load_site_config,
+    merge_limits,
     validate_config,
 )
 
@@ -348,3 +349,56 @@ class TestLoadSiteConfig:
     def test_missing_site_raises(self):
         with pytest.raises(FileNotFoundError):
             load_site_config("no_such_site")
+
+
+class TestMergeLimits:
+    def test_later_source_overrides_earlier(self):
+        merged = merge_limits(
+            {"max_items": 30, "timeout": 180},
+            {"max_items": 10},
+        )
+        assert merged == {"max_items": 10, "timeout": 180}
+
+    def test_three_layer_precedence(self):
+        merged = merge_limits(
+            {"max_items": 30, "max_pages": 3, "stop_on_duplicate": True, "timeout": 180},
+            {"max_items": 10, "max_pages": 2},
+            {"max_items": 5},
+        )
+        assert merged == {
+            "max_items": 5,
+            "max_pages": 2,
+            "stop_on_duplicate": True,
+            "timeout": 180,
+        }
+
+    def test_none_values_are_skipped(self):
+        merged = merge_limits(
+            {"max_items": 30},
+            {"max_items": None, "timeout": 180},
+        )
+        assert merged == {"max_items": 30, "timeout": 180}
+
+    def test_none_and_empty_sources_ignored(self):
+        assert merge_limits(None, {}, None) == {}
+
+    def test_all_none_returns_empty(self):
+        assert merge_limits() == {}
+
+    def test_does_not_mutate_inputs(self):
+        settings = {"max_items": 30}
+        site = {"max_items": 10}
+        result = merge_limits(settings, site)
+        assert settings == {"max_items": 30}
+        assert site == {"max_items": 10}
+        assert result == {"max_items": 10}
+
+
+class TestSettingsLimits:
+    def test_settings_loads_global_limits(self):
+        settings = Settings()
+        limits = settings.get("limits")
+        assert limits["max_items"] == 100
+        assert limits["max_pages"] == 3
+        assert limits["stop_on_duplicate"] is False
+        assert limits["timeout"] == 180

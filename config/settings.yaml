@@ -18,6 +18,15 @@ request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true            # Set to false only for development/testing with self-signed certs
 
+# Global crawl limits applied to every site as defaults. Precedence per field
+# (highest first): CLI args (--max-items/--max-pages/--stop-on-duplicate/--timeout)
+# > site config `limits` (optional per-site override) > this global block > code defaults.
+limits:
+  max_items: 100
+  max_pages: 3
+  stop_on_duplicate: false
+  timeout: 180
+
 # Global category normalization: maps site-specific category names to a unified
 # name so that filtering across sites uses a consistent vocabulary.
 # Defined in the separate file config/category_normalization.yaml (merged by Settings).

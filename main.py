@@ -7,6 +7,26 @@ from src.core import build_engine
 from src.crawler import SiteCrawler
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}")
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer (>= 1)")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}")
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive number (> 0)")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="main.py",
@@ -37,7 +57,47 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CAT",
         help="分類篩選（需站點設定 categories）",
     )
+    parser.add_argument(
+        "--max-items",
+        type=_positive_int,
+        metavar="N",
+        help="覆寫 limits.max_items：收集達此數量即停止（>= 1）",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=_positive_int,
+        metavar="N",
+        help="覆寫 limits.max_pages：爬取列表頁數上限（>= 1）",
+    )
+    parser.add_argument(
+        "--stop-on-duplicate",
+        action=argparse.BooleanOptionalAction,
+        help="覆寫 limits.stop_on_duplicate：遇到重複 URL 即停止（預設沿用設定值）",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=_positive_float,
+        metavar="SEC",
+        help="覆寫 limits.timeout：整體爬取逾時秒數（> 0）",
+    )
     return parser
+
+
+def build_cli_limits(args: argparse.Namespace) -> dict:
+    """Extract the limits overridden by CLI args, only including specified keys.
+
+    Absent flags (None) are omitted so they do not override config defaults.
+    """
+    limits = {}
+    if args.max_items is not None:
+        limits["max_items"] = args.max_items
+    if args.max_pages is not None:
+        limits["max_pages"] = args.max_pages
+    if args.stop_on_duplicate is not None:
+        limits["stop_on_duplicate"] = args.stop_on_duplicate
+    if args.timeout is not None:
+        limits["timeout"] = args.timeout
+    return limits
 
 
 def list_sites() -> int:
@@ -80,6 +140,8 @@ def main(argv: list | None = None) -> int:
         category_normalization=settings.get("category_normalization"),
         keyword=args.keyword,
         category=args.category,
+        default_limits=settings.get("limits"),
+        limit_overrides=build_cli_limits(args),
     )
     engine.run(crawler)
     return 0

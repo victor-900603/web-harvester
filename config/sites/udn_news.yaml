@@ -5,12 +5,6 @@
 name: "聯合新聞網"
 base_url: "https://udn.com"
 
-limits:
-  max_items: 30
-  max_pages: 3
-  stop_on_duplicate: true
-  timeout: 180
-
 request:
   headers:
     Referer: "https://udn.com"
@@ -45,13 +39,10 @@ list_page:
   category_default: "0"
 
   sources:
-    # 預設來源（無 {keyword}）：即時新聞列表，titleLink 為相對路徑
     - url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
       selectors:
         url_template: "https://udn.com{url}"
 
-    # 關鍵字搜尋來源：titleLink 為絕對 URL，故 url_template 直接取原值；
-    # searchword API 不支援分類，故不含 {category} 佔位符
     - url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
       selectors:
         url_template: "{url}"

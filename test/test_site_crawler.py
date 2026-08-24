@@ -63,6 +63,48 @@ class TestStartRequests:
         assert crawler.limits["max_items"] == 10
 
 
+class TestLimitsMerge:
+    def test_default_limits_apply_when_site_has_none(self, sample_site_config):
+        del sample_site_config["limits"]
+        crawler = SiteCrawler(
+            sample_site_config,
+            default_limits={"max_items": 30, "max_pages": 3, "timeout": 180},
+        )
+        assert crawler.limits["max_items"] == 30
+        assert crawler.limits["max_pages"] == 3
+        assert crawler.limits["timeout"] == 180
+
+    def test_site_limits_override_defaults(self, sample_site_config):
+        crawler = SiteCrawler(
+            sample_site_config,
+            default_limits={"max_items": 30, "max_pages": 3, "timeout": 180},
+        )
+        assert crawler.limits["max_items"] == 10
+        assert crawler.limits["max_pages"] == 2
+        assert crawler.limits["timeout"] == 60
+
+    def test_cli_overrides_override_site_and_defaults(self, sample_site_config):
+        crawler = SiteCrawler(
+            sample_site_config,
+            default_limits={"max_items": 30, "max_pages": 3, "timeout": 180},
+            limit_overrides={"max_items": 5, "stop_on_duplicate": False},
+        )
+        assert crawler.limits["max_items"] == 5
+        assert crawler.limits["stop_on_duplicate"] is False
+        assert crawler.limits["max_pages"] == 2
+        assert crawler.limits["timeout"] == 60
+
+    def test_cli_limits_apply_to_site_without_limits(self, sample_site_config):
+        del sample_site_config["limits"]
+        crawler = SiteCrawler(sample_site_config, limit_overrides={"max_pages": 1})
+        assert crawler.limits == {"max_pages": 1}
+
+    def test_limit_overrides_affect_pagination(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config, limit_overrides={"max_pages": 1})
+        urls = [r.url for r in crawler.start_requests()]
+        assert urls == ["https://example.com/news?page=1"]
+
+
 class TestBuildListUrl:
     def test_page_placeholder_filled(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
