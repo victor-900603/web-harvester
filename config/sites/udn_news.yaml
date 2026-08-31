@@ -12,8 +12,8 @@ request:
 list_page:
   type: "json"
 
-  selectors:
-    items: "lists"
+  extract:
+    items_path: "lists"
     url_field: "titleLink"
 
   pagination:
@@ -40,53 +40,57 @@ list_page:
 
   sources:
     - url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
-      selectors:
+      extract:
         url_template: "https://udn.com{url}"
 
     - url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
-      selectors:
+      extract:
         url_template: "{url}"
 
 article_page:
   type: "html"
 
-  selectors:
+  fields:
     title:
-      type: "text"
+      as: "text"
       selector: "h1.article-content__title"
       attr: "text"
 
     content:
-      type: "text"
+      as: "text"
       selector: "section.article-content__editor"
       attr: "text"
 
     published_at:
-      type: "datetime"
+      as: "datetime"
       selector: "time.article-content__time"
       attr: "text"
       datetime_format: "%Y-%m-%d %H:%M"
 
     author:
-      type: "text"
+      as: "text"
       selector: "span.article-content__author"
       attr: "text"
       regex: '(?P<media>.*?)／\s*(?:記者)?(?P<author>.*?)／'
 
 category:
   sources:
-    - type: "meta"
-      name: "section"
+    - source: "html"
+      selector: 'meta[name="section"]'
+      attr: "content"
 
-    - type: "meta"
-      property: "article:section"
+    - source: "html"
+      selector: 'meta[property="article:section"]'
+      attr: "content"
 
-    - type: "json_ld"
+    - source: "json"
+      from: "json_ld"
       path: "itemListElement.1.name"
   default: "其他"
 
 tags:
   sources:
-    - type: "meta"
-      name: "news_keywords"
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
       split: ","
