@@ -17,6 +17,10 @@ engine:
 request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true            # Set to false only for development/testing with self-signed certs
+  http_client: "curl_cffi"    # curl_cffi (TLS fingerprint impersonation) | httpx (fallback)
+  impersonate: "chrome131"    # Browser to impersonate (JA3/Akamai). "" disables; when set, ja3/akamai are ignored
+  # ja3: ""                   # Custom JA3 string — only when impersonate is "" and http_client is curl_cffi
+  # akamai: ""                # Custom Akamai string — only when impersonate is "" and http_client is curl_cffi
 
 # Global crawl limits applied to every site as defaults. Precedence per field
 # (highest first): CLI args (--max-items/--max-pages/--stop-on-duplicate/--timeout)
