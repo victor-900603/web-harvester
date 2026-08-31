@@ -97,7 +97,7 @@
     "list_page": {
       "type": "object",
       "additionalProperties": false,
-      "description": "List page configuration. Multiple named list sources (sources) provide distinct URL templates; a source can express a filter (keyword/category) if its URL contains the matching placeholder. Fields defined at this level (method/type/selectors/pagination) act as defaults inherited by every source unless overridden.",
+      "description": "List page configuration. Multiple named list sources (sources) provide distinct URL templates; a source can express a filter (keyword/category) if its URL contains the matching placeholder. Fields defined at this level (method/type/extract/pagination) act as defaults inherited by every source unless overridden.",
       "properties": {
         "method": {
           "type": "string",
@@ -109,9 +109,9 @@
           "enum": ["html", "json"],
           "description": "Default response type inherited by all sources."
         },
-        "selectors": {
-          "$ref": "#/$defs/list_selectors",
-          "description": "Default list selectors inherited by all sources; deep-merged with a source's own selectors."
+        "extract": {
+          "$ref": "#/$defs/list_extract",
+          "description": "Default list extraction config inherited by all sources; deep-merged with a source's own extract."
         },
         "pagination": {
           "$ref": "#/$defs/pagination",
@@ -137,8 +137,8 @@
                 "type": "string",
                 "enum": ["html", "json"]
               },
-              "selectors": {
-                "$ref": "#/$defs/list_selectors_partial"
+              "extract": {
+                "$ref": "#/$defs/list_extract_partial"
               },
               "pagination": {
                 "$ref": "#/$defs/pagination"
@@ -171,7 +171,7 @@
           "type": "string",
           "enum": ["html", "json"]
         },
-        "selectors": {
+        "fields": {
           "type": "object",
           "description": "Map of output field names to a CSS selector / JSON path (string) or a field configuration object. The valid field configuration form depends on article_page.type (see the conditional schemas below)."
         }
@@ -188,7 +188,7 @@
           },
           "then": {
             "properties": {
-              "selectors": {
+              "fields": {
                 "additionalProperties": {
                   "oneOf": [
                     {
@@ -213,7 +213,7 @@
           },
           "then": {
             "properties": {
-              "selectors": {
+              "fields": {
                 "additionalProperties": {
                   "oneOf": [
                     {
@@ -247,19 +247,19 @@
       },
       "required": ["enabled"]
     },
-    "list_selectors": {
-      "description": "List page selectors. Use the HTML form for HTML list pages and the JSON form for JSON list pages.",
+    "list_extract": {
+      "description": "List page extract config. Use the HTML form for HTML list pages and the JSON form for JSON list pages.",
       "oneOf": [
         {
-          "title": "HTML list selectors",
+          "title": "HTML list extract",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "items": {
+            "item_selector": {
               "type": "string",
               "description": "CSS selector for the container of each list item."
             },
-            "link": {
+            "link_selector": {
               "type": "string",
               "description": "CSS selector for the link element within an item."
             },
@@ -268,14 +268,14 @@
               "description": "Attribute to read the link URL from (default: href)."
             }
           },
-          "required": ["items"]
+          "required": ["item_selector"]
         },
         {
-          "title": "JSON list selectors",
+          "title": "JSON list extract",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "items": {
+            "items_path": {
               "type": "string",
               "description": "JSON path to the list of items."
             },
@@ -288,26 +288,30 @@
               "description": "URL template with a {url} placeholder used to build the final URL."
             }
           },
-          "required": ["items", "url_field"]
+          "required": ["items_path", "url_field"]
         }
       ]
     },
-    "list_selectors_partial": {
-      "description": "Partial list selectors override within a list source. Deep-merged over the list_page-level selectors, so only the fields being overridden need to be present.",
+    "list_extract_partial": {
+      "description": "Partial list extract override within a list source. Deep-merged over the list_page-level extract, so only the fields being overridden need to be present.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "items": {
+        "item_selector": {
           "type": "string",
-          "description": "CSS selector or JSON path for the container of each list item."
+          "description": "CSS selector for the container of each list item."
         },
-        "link": {
+        "link_selector": {
           "type": "string",
           "description": "CSS selector for the link element within an item."
         },
         "link_attr": {
           "type": "string",
           "description": "Attribute to read the link URL from (default: href)."
+        },
+        "items_path": {
+          "type": "string",
+          "description": "JSON path to the list of items."
         },
         "url_field": {
           "type": "string",
@@ -320,146 +324,97 @@
       }
     },
     "classifier_source": {
-      "description": "A single classification source. The 'type' field selects the extraction strategy; 'mapping' optionally translates raw values into display names.",
+      "description": "A single classification source. The 'source' field selects the extraction strategy; 'mapping' optionally translates raw values into display names.",
       "oneOf": [
         {
           "title": "URL source",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": {
+            "source": {
               "const": "url"
             },
             "regex": {
               "type": "string",
               "description": "Regular expression matched against the article URL. The first capture group is used as the raw value."
             },
-            "mapping": {
-              "$ref": "#/$defs/classifier_mapping"
-            }
-          },
-          "required": ["type", "regex"]
-        },
-        {
-          "title": "Meta source",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "meta"
-            },
-            "name": {
-              "type": "string",
-              "description": "Value of the meta name attribute, e.g. 'section'."
-            },
-            "property": {
-              "type": "string",
-              "description": "Value of the meta property attribute, e.g. 'article:section'."
-            },
             "split": {
               "type": "string",
-              "description": "Delimiter used to split the meta content into multiple tags (tags only)."
+              "description": "Delimiter used to split the raw value into multiple tags/categories."
             },
             "mapping": {
               "$ref": "#/$defs/classifier_mapping"
             }
           },
-          "required": ["type"],
-          "anyOf": [
-            {
-              "required": ["name"]
-            },
-            {
-              "required": ["property"]
-            }
-          ]
+          "required": ["source", "regex"]
         },
         {
-          "title": "Selector source",
+          "title": "HTML source",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": {
-              "const": "selector"
+            "source": {
+              "const": "html"
             },
             "selector": {
               "type": "string",
-              "description": "CSS selector targeting an element in the article HTML."
+              "description": "CSS selector targeting element(s) in the article HTML."
             },
             "attr": {
               "type": "string",
               "description": "Attribute to extract. Defaults to 'text'."
             },
+            "multiple": {
+              "type": "boolean",
+              "description": "When true, collect all matching elements; otherwise take the first. Mutually exclusive with 'join'."
+            },
             "join": {
               "type": "string",
-              "description": "Delimiter used to join multiple matched values (category only); omitting it takes the first match."
+              "description": "Delimiter used to join multiple matched values (category only); omitting it takes the first match. Mutually exclusive with 'multiple'."
+            },
+            "split": {
+              "type": "string",
+              "description": "Delimiter used to split the extracted value into multiple tags/categories."
             },
             "mapping": {
               "$ref": "#/$defs/classifier_mapping"
             }
           },
-          "required": ["type", "selector"]
+          "required": ["source", "selector"]
         },
         {
-          "title": "JSON-LD source",
+          "title": "JSON source",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": {
-              "const": "json_ld"
+            "source": {
+              "const": "json"
+            },
+            "from": {
+              "type": "string",
+              "enum": ["json_ld", "list_data", "article_json"],
+              "description": "JSON data source: json_ld (first JSON-LD block), list_data (list item meta), or article_json (article response body)."
             },
             "path": {
               "type": "string",
-              "description": "Dot-separated JSON path into the first JSON-LD block, e.g. 'itemListElement.1.name'."
+              "description": "Dot-separated JSON path into the selected JSON data."
+            },
+            "split": {
+              "type": "string",
+              "description": "Delimiter used to split the extracted string value into multiple tags/categories."
             },
             "mapping": {
               "$ref": "#/$defs/classifier_mapping"
             }
           },
-          "required": ["type", "path"]
-        },
-        {
-          "title": "List data source",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "list_data"
-            },
-            "path": {
-              "type": "string",
-              "description": "Dot-separated JSON path into the list item data carried in request meta."
-            },
-            "mapping": {
-              "$ref": "#/$defs/classifier_mapping"
-            }
-          },
-          "required": ["type", "path"]
-        },
-        {
-          "title": "Article JSON source",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "article_json"
-            },
-            "path": {
-              "type": "string",
-              "description": "Dot-separated JSON path into the article JSON response body."
-            },
-            "mapping": {
-              "$ref": "#/$defs/classifier_mapping"
-            }
-          },
-          "required": ["type", "path"]
+          "required": ["source", "from", "path"]
         },
         {
           "title": "Keyword source",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": {
+            "source": {
               "const": "keyword"
             },
             "rules": {
@@ -488,7 +443,7 @@
               "$ref": "#/$defs/classifier_mapping"
             }
           },
-          "required": ["type", "rules"]
+          "required": ["source", "rules"]
         }
       ]
     },
@@ -504,9 +459,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": {
+        "as": {
           "type": "string",
-          "enum": ["text", "datetime", "attr"]
+          "enum": ["text", "datetime"],
+          "description": "Extraction strategy: text (default) or datetime."
         },
         "selector": {
           "type": "string",
@@ -518,7 +474,7 @@
         },
         "datetime_format": {
           "type": "string",
-          "description": "strptime format used when type is 'datetime'."
+          "description": "strptime format used when as is 'datetime'."
         },
         "regex": {
           "type": "string",
@@ -532,9 +488,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": {
+        "as": {
           "type": "string",
-          "enum": ["text", "datetime", "attr"]
+          "enum": ["text", "datetime"],
+          "description": "Extraction strategy: text (default) or datetime."
         },
         "path": {
           "type": "string",
@@ -542,7 +499,7 @@
         },
         "datetime_format": {
           "type": "string",
-          "description": "strptime format used when type is 'datetime'."
+          "description": "strptime format used when as is 'datetime'."
         },
         "regex": {
           "type": "string",
