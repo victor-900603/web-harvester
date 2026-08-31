@@ -110,9 +110,9 @@ class TestValidateConfig:
             "list_page": {
                 "type": "html",
                 "sources": [{"url": "https://example.com"}],
-                "selectors": {
-                    "items": "a",
-                    "link": "a",
+                "extract": {
+                    "item_selector": "a",
+                    "link_selector": "a",
                     "link_attr": "href",
                     "url_field": "url",
                 },
@@ -133,8 +133,8 @@ class TestValidateConfig:
             "base_url": "https://example.com",
             "article_page": {
                 "type": "html",
-                "selectors": {
-                    "title": {"type": "text", "path": "data.title"},
+                "fields": {
+                    "title": {"as": "text", "path": "data.title"},
                 },
             },
         }
@@ -147,8 +147,8 @@ class TestValidateConfig:
             "base_url": "https://example.com",
             "article_page": {
                 "type": "json",
-                "selectors": {
-                    "title": {"type": "text", "selector": "h1.title"},
+                "fields": {
+                    "title": {"as": "text", "selector": "h1.title"},
                 },
             },
         }
@@ -157,12 +157,12 @@ class TestValidateConfig:
 
 
 class TestCategorySchema:
-    def test_valid_category_meta_passes(self):
+    def test_valid_category_html_passes(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
             "category": {
-                "sources": [{"type": "meta", "name": "section"}],
+                "sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}],
                 "default": "其他",
             },
         }
@@ -174,13 +174,13 @@ class TestCategorySchema:
             "base_url": "https://example.com",
             "category": {
                 "sources": [
-                    {"type": "url", "regex": "/story/(\\d+)/", "mapping": {"1": "A"}},
-                    {"type": "meta", "property": "article:section"},
-                    {"type": "selector", "selector": "a.breadcrumb", "attr": "text", "join": ">"},
-                    {"type": "json_ld", "path": "itemListElement.1.name"},
-                    {"type": "list_data", "path": "cate_id"},
-                    {"type": "article_json", "path": "data.category"},
-                    {"type": "keyword", "rules": [{"keywords": ["a"], "value": "A"}]},
+                    {"source": "url", "regex": "/story/(\\d+)/", "mapping": {"1": "A"}},
+                    {"source": "html", "selector": 'meta[property="article:section"]', "attr": "content"},
+                    {"source": "html", "selector": "a.breadcrumb", "attr": "text", "join": ">"},
+                    {"source": "json", "from": "json_ld", "path": "itemListElement.1.name"},
+                    {"source": "json", "from": "list_data", "path": "cate_id"},
+                    {"source": "json", "from": "article_json", "path": "data.category"},
+                    {"source": "keyword", "rules": [{"keywords": ["a"], "value": "A"}]},
                 ],
             },
         }
@@ -199,16 +199,16 @@ class TestCategorySchema:
         data = {
             "name": "x",
             "base_url": "https://example.com",
-            "category": {"sources": [{"type": "url"}]},
+            "category": {"sources": [{"source": "url"}]},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
-    def test_meta_source_missing_name_and_property_rejected(self):
+    def test_html_source_missing_selector_rejected(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
-            "category": {"sources": [{"type": "meta"}]},
+            "category": {"sources": [{"source": "html"}]},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
@@ -217,7 +217,7 @@ class TestCategorySchema:
         data = {
             "name": "x",
             "base_url": "https://example.com",
-            "category": {"sources": [{"type": "bogus", "foo": "bar"}]},
+            "category": {"sources": [{"source": "bogus", "foo": "bar"}]},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
@@ -227,7 +227,7 @@ class TestCategorySchema:
             "name": "x",
             "base_url": "https://example.com",
             "tags": {
-                "sources": [{"type": "meta", "name": "news_keywords", "split": ","}],
+                "sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","}],
             },
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
@@ -236,7 +236,7 @@ class TestCategorySchema:
         data = {
             "name": "x",
             "base_url": "https://example.com",
-            "tags": {"sources": [{"type": "meta", "name": "section"}], "extra": True},
+            "tags": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}], "extra": True},
         }
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
@@ -262,17 +262,17 @@ class TestListPageSourcesSchema:
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
-    def test_source_partial_selectors_valid(self):
+    def test_source_partial_extract_valid(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
                 "type": "json",
-                "selectors": {"items": "lists", "url_field": "titleLink"},
+                "extract": {"items_path": "lists", "url_field": "titleLink"},
                 "sources": [
                     {
                         "url": "https://example.com/api?page={page}",
-                        "selectors": {"url_template": "https://example.com{url}"},
+                        "extract": {"url_template": "https://example.com{url}"},
                     },
                 ],
             },

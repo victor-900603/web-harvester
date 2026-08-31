@@ -227,12 +227,12 @@ class TestParseList:
     def test_json_list_yields_requests_with_template(self, sample_site_config):
         sample_site_config["list_page"] = {
             "type": "json",
-            "selectors": {
-                "items": "data.articles",
+            "extract": {
+                "items_path": "data.articles",
                 "url_field": "slug",
             },
             "sources": [
-                {"url": "https://example.com/api", "selectors": {"url_template": "https://example.com{url}"}},
+                {"url": "https://example.com/api", "extract": {"url_template": "https://example.com{url}"}},
             ],
         }
         crawler = SiteCrawler(sample_site_config)
@@ -245,18 +245,18 @@ class TestParseList:
         assert results[0].url == "https://example.com/a/1"
         assert results[1].url == "https://example.com/a/2"
 
-    def test_source_selectors_deep_merge_with_defaults(self, sample_site_config):
+    def test_source_extract_deep_merge_with_defaults(self, sample_site_config):
         sample_site_config["list_page"] = {
             "type": "json",
-            "selectors": {
-                "items": "lists",
+            "extract": {
+                "items_path": "lists",
                 "url_field": "titleLink",
             },
             "sources": [
                 {"url": "https://example.com/api?page={page}"},
                 {
                     "url": "https://example.com/api?page={page}&q={keyword}",
-                    "selectors": {"url_template": "{url}"},
+                    "extract": {"url_template": "{url}"},
                 },
             ],
         }
@@ -303,9 +303,9 @@ class TestParseArticle:
     def test_json_article_extracts_fields(self, sample_site_config):
         sample_site_config["article_page"] = {
             "type": "json",
-            "selectors": {
+            "fields": {
                 "title": "data.title",
-                "content": {"type": "text", "path": "data.content"},
+                "content": {"as": "text", "path": "data.content"},
             },
         }
         crawler = SiteCrawler(sample_site_config)
@@ -319,24 +319,24 @@ class TestParseArticle:
 
     def test_extract_field_datetime_without_format(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
-        value = crawler._extract_field("2026-08-19T10:00:00", {"type": "datetime"})
+        value = crawler._extract_field("2026-08-19T10:00:00", {"as": "datetime"})
         assert isinstance(value, datetime)
 
     def test_extract_field_regex(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
-        value = crawler._extract_field("id-123", {"type": "text", "regex": r"(\d+)"})
+        value = crawler._extract_field("id-123", {"as": "text", "regex": r"(\d+)"})
         assert value == "123"
 
     def test_extract_field_returns_raw_value_on_error(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
-        value = crawler._extract_field("not-a-date", {"type": "datetime", "datetime_format": "%Y"})
+        value = crawler._extract_field("not-a-date", {"as": "datetime", "datetime_format": "%Y"})
         assert value == "not-a-date"
 
     def test_html_field_missing_selector_skipped(self, sample_site_config):
         sample_site_config["article_page"] = {
             "type": "html",
-            "selectors": {
-                "title": {"type": "text"},
+            "fields": {
+                "title": {"as": "text"},
                 "content": "h1.article-title",
             },
         }
@@ -351,9 +351,9 @@ class TestParseArticle:
             "content": "Title",
         }
 
-    def test_article_category_from_meta(self, sample_site_config):
+    def test_article_category_from_html(self, sample_site_config):
         sample_site_config["category"] = {
-            "sources": [{"type": "meta", "name": "section"}],
+            "sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}],
         }
         crawler = SiteCrawler(sample_site_config)
         resp = make_response(
@@ -366,7 +366,7 @@ class TestParseArticle:
 
     def test_article_category_default_fallback(self, sample_site_config):
         sample_site_config["category"] = {
-            "sources": [{"type": "meta", "name": "section"}],
+            "sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}],
             "default": "其他",
         }
         crawler = SiteCrawler(sample_site_config)
@@ -377,9 +377,9 @@ class TestParseArticle:
         item = next(crawler.parse_article(resp))
         assert item.data["category"] == ["其他"]
 
-    def test_article_tags_from_meta_split(self, sample_site_config):
+    def test_article_tags_from_html_split(self, sample_site_config):
         sample_site_config["tags"] = {
-            "sources": [{"type": "meta", "name": "news_keywords", "split": ","}],
+            "sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","}],
         }
         crawler = SiteCrawler(sample_site_config)
         resp = make_response(
@@ -392,7 +392,7 @@ class TestParseArticle:
 
     def test_article_classification_list_data_source(self, sample_site_config):
         sample_site_config["category"] = {
-            "sources": [{"type": "list_data", "path": "cate_id"}],
+            "sources": [{"source": "json", "from": "list_data", "path": "cate_id"}],
         }
         crawler = SiteCrawler(sample_site_config)
         request = Request(

@@ -55,12 +55,12 @@ def classify_tags(classifier, url="https://udn.com/x", html=HTML, data=None):
 
 
 class TestCategory:
-    def test_meta_name_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "name": "section"}]}})
+    def test_html_name_source(self):
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}]}})
         assert classify_categories(classifier) == ["股市"]
 
-    def test_meta_property_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "property": "article:section"}]}})
+    def test_html_property_source(self):
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[property="article:section"]', "attr": "content"}]}})
         assert classify_categories(classifier) == ["財經"]
 
     def test_url_source_with_mapping(self):
@@ -69,7 +69,7 @@ class TestCategory:
                 "category": {
                     "sources": [
                         {
-                            "type": "url",
+                            "source": "url",
                             "regex": "/story/(\\d+)/",
                             "mapping": {"7251": "股市", "6656": "政治"},
                         }
@@ -80,35 +80,41 @@ class TestCategory:
         assert classify_categories(classifier, url="https://udn.com/news/story/7251/9700553") == ["股市"]
 
     def test_url_source_without_mapping_returns_raw(self):
-        classifier = Classifier({"category": {"sources": [{"type": "url", "regex": "/story/(\\d+)/"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "url", "regex": "/story/(\\d+)/"}]}})
         assert classify_categories(classifier, url="https://udn.com/news/story/7251/9700553") == ["7251"]
 
     def test_url_source_no_match_returns_default(self):
-        classifier = Classifier({"category": {"sources": [{"type": "url", "regex": "/story/(\\d+)/"}], "default": "其他"}})
+        classifier = Classifier({"category": {"sources": [{"source": "url", "regex": "/story/(\\d+)/"}], "default": "其他"}})
         assert classify_categories(classifier, url="https://udn.com/not-a-story") == ["其他"]
 
-    def test_selector_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "selector", "selector": "a.breadcrumb-item", "attr": "text"}]}})
+    def test_html_selector_source(self):
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": "a.breadcrumb-item", "attr": "text"}]}})
         assert classify_categories(classifier) == ["首頁"]
 
-    def test_selector_source_with_join(self):
+    def test_html_selector_source_with_join(self):
         classifier = Classifier(
-            {"category": {"sources": [{"type": "selector", "selector": "a.breadcrumb-item", "attr": "text", "join": ">"}]}}
+            {"category": {"sources": [{"source": "html", "selector": "a.breadcrumb-item", "attr": "text", "join": ">"}]}}
         )
         assert classify_categories(classifier) == ["首頁>股市"]
 
+    def test_html_selector_source_with_multiple(self):
+        classifier = Classifier(
+            {"category": {"sources": [{"source": "html", "selector": "a.breadcrumb-item", "attr": "text", "multiple": True}]}},
+        )
+        assert classify_categories(classifier) == ["首頁", "股市"]
+
     def test_json_ld_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "json_ld", "path": "itemListElement.1.name"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "json", "from": "json_ld", "path": "itemListElement.1.name"}]}})
         assert classify_categories(classifier) == ["股市"]
 
     def test_list_data_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "list_data", "path": "cate_id"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "json", "from": "list_data", "path": "cate_id"}]}})
         response = make_response_with_list_data(list_data={"cate_id": "6656"})
         categories, _, _ = classifier.classify(response, make_data())
         assert categories == ["6656"]
 
     def test_article_json_source(self):
-        classifier = Classifier({"category": {"sources": [{"type": "article_json", "path": "data.category"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "json", "from": "article_json", "path": "data.category"}]}})
         assert classify_categories(classifier, html='{"data": {"category": "國際"}}') == ["國際"]
 
     def test_keyword_source_hit(self):
@@ -117,7 +123,7 @@ class TestCategory:
                 "category": {
                     "sources": [
                         {
-                            "type": "keyword",
+                            "source": "keyword",
                             "rules": [
                                 {"keywords": ["台股", "股市"], "value": "財經"},
                                 {"keywords": ["棒球"], "value": "體育"},
@@ -133,7 +139,7 @@ class TestCategory:
         classifier = Classifier(
             {
                 "category": {
-                    "sources": [{"type": "keyword", "rules": [{"keywords": ["棒球"], "value": "體育"}]}],
+                    "sources": [{"source": "keyword", "rules": [{"keywords": ["棒球"], "value": "體育"}]}],
                     "default": "其他",
                 }
             }
@@ -145,8 +151,8 @@ class TestCategory:
             {
                 "category": {
                     "sources": [
-                        {"type": "meta", "name": "section"},
-                        {"type": "meta", "property": "article:section"},
+                        {"source": "html", "selector": 'meta[name="section"]', "attr": "content"},
+                        {"source": "html", "selector": 'meta[property="article:section"]', "attr": "content"},
                     ]
                 }
             }
@@ -158,8 +164,8 @@ class TestCategory:
             {
                 "category": {
                     "sources": [
-                        {"type": "meta", "name": "section"},
-                        {"type": "json_ld", "path": "itemListElement.1.name"},
+                        {"source": "html", "selector": 'meta[name="section"]', "attr": "content"},
+                        {"source": "json", "from": "json_ld", "path": "itemListElement.1.name"},
                     ]
                 }
             }
@@ -174,7 +180,7 @@ class TestCategory:
         classifier = Classifier(
             {
                 "category": {
-                    "sources": [{"type": "url", "regex": "/story/(\\d+)/"}],
+                    "sources": [{"source": "url", "regex": "/story/(\\d+)/"}],
                     "default": "其他",
                 }
             }
@@ -185,7 +191,7 @@ class TestCategory:
 class TestNormalizedCategory:
     def test_normalization_applied(self):
         classifier = Classifier(
-            {"category": {"sources": [{"type": "meta", "name": "section"}]}},
+            {"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}]}},
             category_normalization={"股市": "財經"},
         )
         _, normalized, _ = classifier.classify(make_response("https://udn.com/x", HTML), make_data())
@@ -193,7 +199,7 @@ class TestNormalizedCategory:
 
     def test_normalization_unmatched_keeps_raw(self):
         classifier = Classifier(
-            {"category": {"sources": [{"type": "meta", "name": "section"}]}},
+            {"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}]}},
             category_normalization={"科技": "科技"},
         )
         _, normalized, _ = classifier.classify(make_response("https://udn.com/x", HTML), make_data())
@@ -204,8 +210,8 @@ class TestNormalizedCategory:
             {
                 "category": {
                     "sources": [
-                        {"type": "meta", "name": "section"},
-                        {"type": "meta", "property": "article:section"},
+                        {"source": "html", "selector": 'meta[name="section"]', "attr": "content"},
+                        {"source": "html", "selector": 'meta[property="article:section"]', "attr": "content"},
                     ]
                 }
             },
@@ -215,13 +221,13 @@ class TestNormalizedCategory:
         assert normalized == ["財經"]
 
     def test_no_normalization_returns_same(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "name": "section"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}]}})
         _, normalized, _ = classifier.classify(make_response("https://udn.com/x", HTML), make_data())
         assert normalized == ["股市"]
 
     def test_default_normalized(self):
         classifier = Classifier(
-            {"category": {"sources": [{"type": "url", "regex": "/nope/(\\d+)/"}], "default": "其他"}},
+            {"category": {"sources": [{"source": "url", "regex": "/nope/(\\d+)/"}], "default": "其他"}},
             category_normalization={"其他": "未分類"},
         )
         _, normalized, _ = classifier.classify(make_response("https://udn.com/x", HTML), make_data())
@@ -229,13 +235,18 @@ class TestNormalizedCategory:
 
 
 class TestTags:
-    def test_meta_source_with_split(self):
-        classifier = Classifier({"tags": {"sources": [{"type": "meta", "name": "news_keywords", "split": ","}]}})
+    def test_html_source_with_split(self):
+        classifier = Classifier({"tags": {"sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","}]}})
         assert classify_tags(classifier) == ["台股", "科技股", "國銀"]
 
-    def test_meta_source_without_split_single_tag(self):
-        classifier = Classifier({"tags": {"sources": [{"type": "meta", "name": "section"}]}})
+    def test_html_source_without_split_single_tag(self):
+        classifier = Classifier({"tags": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}]}})
         assert classify_tags(classifier) == ["股市"]
+
+    def test_html_source_multiple(self):
+        html_multi = '<html><body><a class="tag">a</a><a class="tag">b</a></body></html>'
+        classifier = Classifier({"tags": {"sources": [{"source": "html", "selector": "a.tag", "attr": "text", "multiple": True}]}})
+        assert classify_tags(classifier, html=html_multi) == ["a", "b"]
 
     def test_keyword_source_all_matching_rules(self):
         classifier = Classifier(
@@ -243,7 +254,7 @@ class TestTags:
                 "tags": {
                     "sources": [
                         {
-                            "type": "keyword",
+                            "source": "keyword",
                             "rules": [
                                 {"keywords": ["台股"], "value": "台股"},
                                 {"keywords": ["大漲", "開高"], "value": "股市"},
@@ -261,8 +272,8 @@ class TestTags:
             {
                 "tags": {
                     "sources": [
-                        {"type": "meta", "name": "news_keywords", "split": ","},
-                        {"type": "meta", "name": "section"},
+                        {"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","},
+                        {"source": "html", "selector": 'meta[name="section"]', "attr": "content"},
                     ]
                 }
             }
@@ -274,26 +285,26 @@ class TestTags:
         assert classify_tags(classifier) == []
 
     def test_article_json_source_array(self):
-        classifier = Classifier({"tags": {"sources": [{"type": "article_json", "path": "data.tags"}]}})
+        classifier = Classifier({"tags": {"sources": [{"source": "json", "from": "article_json", "path": "data.tags"}]}})
         assert classify_tags(classifier, html='{"data": {"tags": ["a", "b"]}}') == ["a", "b"]
 
     def test_source_without_match_skipped(self):
-        classifier = Classifier({"tags": {"sources": [{"type": "url", "regex": "/nope/(\\d+)/"}]}})
+        classifier = Classifier({"tags": {"sources": [{"source": "url", "regex": "/nope/(\\d+)/"}]}})
         assert classify_tags(classifier) == []
 
 
 class TestMapping:
-    def test_mapping_applied_to_meta(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "name": "section", "mapping": {"股市": "金融"}}]}})
+    def test_mapping_applied_to_html(self):
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content", "mapping": {"股市": "金融"}}]}})
         assert classify_categories(classifier) == ["金融"]
 
     def test_mapping_missing_key_keeps_raw(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "name": "section", "mapping": {"未知": "X"}}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content", "mapping": {"未知": "X"}}]}})
         assert classify_categories(classifier) == ["股市"]
 
     def test_mapping_applied_to_tags(self):
         classifier = Classifier(
-            {"tags": {"sources": [{"type": "meta", "name": "news_keywords", "split": ",", "mapping": {"台股": "TWSE"}}]}}
+            {"tags": {"sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ",", "mapping": {"台股": "TWSE"}}]}}
         )
         assert classify_tags(classifier) == ["TWSE", "科技股", "國銀"]
 
@@ -301,15 +312,15 @@ class TestMapping:
 class TestRobustness:
     def test_malformed_json_ld_skipped(self):
         html = '<html><head><script type="application/ld+json">{not valid</script></head></html>'
-        classifier = Classifier({"category": {"sources": [{"type": "json_ld", "path": "itemListElement.1.name"}]}})
+        classifier = Classifier({"category": {"sources": [{"source": "json", "from": "json_ld", "path": "itemListElement.1.name"}]}})
         assert classify_categories(classifier, html=html) == []
 
     def test_unknown_source_type_logs_and_skips(self):
-        classifier = Classifier({"category": {"sources": [{"type": "bogus", "foo": "bar"}], "default": "其他"}})
+        classifier = Classifier({"category": {"sources": [{"source": "bogus", "foo": "bar"}], "default": "其他"}})
         assert classify_categories(classifier) == ["其他"]
 
-    def test_meta_missing_on_page_returns_empty(self):
-        classifier = Classifier({"category": {"sources": [{"type": "meta", "name": "nonexistent"}]}})
+    def test_html_missing_on_page_returns_empty(self):
+        classifier = Classifier({"category": {"sources": [{"source": "html", "selector": 'meta[name="nonexistent"]', "attr": "content"}]}})
         assert classify_categories(classifier) == []
 
     def test_keyword_matches_content_not_only_title(self):
@@ -318,7 +329,7 @@ class TestRobustness:
                 "category": {
                     "sources": [
                         {
-                            "type": "keyword",
+                            "source": "keyword",
                             "rules": [{"keywords": ["加權指數"], "value": "財經"}],
                         }
                     ]
@@ -330,8 +341,8 @@ class TestRobustness:
     def test_item_integration(self):
         classifier = Classifier(
             {
-                "category": {"sources": [{"type": "meta", "name": "section"}], "default": "其他"},
-                "tags": {"sources": [{"type": "meta", "name": "news_keywords", "split": ","}]},
+                "category": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}], "default": "其他"},
+                "tags": {"sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","}]},
             }
         )
         item = Item(data=make_data(), source="udn", url="https://udn.com/news/story/7251/9700553")
