@@ -16,16 +16,9 @@ def _settings_get(settings: Any, key: str, default: Any = None) -> Any:
     if hasattr(settings, "get"):
         try:
             result = settings.get(key, default)  # type: ignore[call-arg]
-            if isinstance(settings, dict) and "." in key and result is default:
-                parts = key.split(".")
-                cur: Any = settings
-                for part in parts:
-                    if isinstance(cur, dict) and part in cur:
-                        cur = cur[part]
-                    else:
-                        return default
-                return cur if cur is not None else default
-            return result
+            # Settings.get already handles dot-notation; plain dict needs fallback.
+            if not isinstance(settings, dict) or "." not in key or result is not default:
+                return result
         except TypeError:
             pass
     if isinstance(settings, dict):
