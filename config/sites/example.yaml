@@ -25,10 +25,10 @@ request:
 list_page:
   type: "html"
 
-  # 擷取文章連結的選擇器
-  selectors:
-    items: "article.news-item"
-    link: "a"
+  # 擷取文章連結的抽取設定
+  extract:
+    item_selector: "article.news-item"
+    link_selector: "a"
     link_attr: "href"
 
   # 分頁設定（頁數上限由 limits.max_pages 控制）
@@ -44,21 +44,21 @@ list_page:
 article_page:
   type: "html"
 
-  selectors:
+  fields:
     title: "h1.article-title"
 
     content:
-      type: "text"
+      as: "text"
       selector: "div.article-body"
       attr: "text"
 
     published_at:
-      type: "datetime"
+      as: "datetime"
       selector: "time.publish-date"
       attr: "datetime"
       datetime_format: "%Y-%m-%dT%H:%M:%S"
 
     author:
-      type: "text"
+      as: "text"
       selector: "span.author-name"
       attr: "text"

@@ -1,0 +1,119 @@
+# ============================================================
+# 完整網站設定範本 - 參照 config/schema/site.schema.json
+# 涵蓋所有欄位與形態，刪除不需要的區塊即可使用
+# 說明請見 docs/site-config.md §10 附錄
+# ============================================================
+
+name: "full_example"
+base_url: "https://example.com"
+
+limits:
+  max_items: 50
+  max_pages: 5
+  stop_on_duplicate: true
+  timeout: 300
+
+request:
+  headers:
+    Referer: "https://example.com"
+    X-Custom: "value"
+  cookies:
+    session: "xxx"
+
+list_page:
+  method: "GET"
+  type: "html"
+  categories:
+    "股市": "7251"
+    "政治": "6645"
+  category_default: "0"
+  extract:
+    item_selector: "article.news-item"
+    link_selector: "a"
+    link_attr: "href"
+  pagination:
+    enabled: true
+    start: 1
+  sources:
+    - url: "https://example.com/news?page={page}&cat={category}"
+    - url: "https://example.com/search?q={keyword}&page={page}"
+      type: "html"
+      extract:
+        item_selector: "div.search-item"
+        link_selector: "a.title"
+        link_attr: "href"
+    - url: "https://example.com/api/list?page={page}"
+      type: "json"
+      method: "GET"
+      extract:
+        items_path: "result.articles"
+        url_field: "slug"
+        url_template: "https://example.com/article/{url}"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+  fields:
+    title: "h1.article-title"
+    content:
+      as: "text"
+      selector: "div.article-body"
+      attr: "text"
+      regex: "(.*)"
+    published_at:
+      as: "datetime"
+      selector: "time"
+      attr: "text"
+      datetime_format: "%Y-%m-%d %H:%M"
+    author:
+      selector: "meta[name='author']"
+      attr: "content"
+
+category:
+  sources:
+    - source: "html"
+      selector: 'meta[name="section"]'
+      attr: "content"
+      mapping:
+        "raw1": "顯示名1"
+    - source: "url"
+      regex: "/story/(\\d+)/"
+      mapping:
+        "7251": "股市"
+    - source: "html"
+      selector: "a.breadcrumb-item"
+      attr: "text"
+      join: ">"
+    - source: "json"
+      from: "json_ld"
+      path: "about.name"
+    - source: "json"
+      from: "list_data"
+      path: "category"
+    - source: "json"
+      from: "article_json"
+      path: "data.category"
+    - source: "keyword"
+      rules:
+        - keywords: ["台股", "股市"]
+          value: "財經"
+        - keywords: ["AI"]
+          value: "科技"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
+      split: ","
+    - source: "html"
+      selector: "a.tag"
+      attr: "text"
+      multiple: true
+    - source: "keyword"
+      rules:
+        - keywords: ["台股"]
+          value: "台股"
