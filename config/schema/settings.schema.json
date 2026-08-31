@@ -56,6 +56,24 @@
         },
         "verify_ssl": {
           "type": "boolean"
+        },
+        "http_client": {
+          "type": "string",
+          "enum": ["curl_cffi", "httpx"],
+          "description": "HTTP client implementation. curl_cffi provides TLS fingerprint impersonation; httpx is the fallback without fingerprinting."
+        },
+        "impersonate": {
+          "type": "string",
+          "enum": ["chrome99", "chrome100", "chrome101", "chrome104", "chrome107", "chrome110", "chrome116", "chrome119", "chrome120", "chrome122", "chrome124", "chrome131", "chrome131_android", "safari15_3", "safari15_5", "safari17_0", "safari17_2_ios", "safari18_0", "safari18_0_ios", "firefox133", "edge101", "edge122", ""],
+          "description": "Browser to impersonate for TLS fingerprint (JA3/Akamai). Empty string disables impersonation; when set, ja3/akamai are ignored."
+        },
+        "ja3": {
+          "type": "string",
+          "description": "Custom JA3 string. Only effective when http_client is curl_cffi and impersonate is empty."
+        },
+        "akamai": {
+          "type": "string",
+          "description": "Custom Akamai HTTP/2 fingerprint string. Only effective when http_client is curl_cffi and impersonate is empty."
         }
       }
     },

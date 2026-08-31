@@ -61,7 +61,6 @@ def setup_logging(
         file_handler.setFormatter(logging.Formatter(log_format))
         main_logger.addHandler(file_handler)
         
-    logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("curl_cffi").setLevel(logging.WARNING)

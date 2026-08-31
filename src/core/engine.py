@@ -6,10 +6,9 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
-import requests
-import aiohttp
 import httpx
 
+from .http_client import BaseHttpClient, build_http_client
 from .request import Request
 from .response import Response
 from .item import Item
@@ -46,6 +45,9 @@ class CrawlerEngine:
         request_cfg = self.settings.get("request", {})
         self._user_agent = request_cfg.get("user_agent", "web-harvester/1.0")
         self._verify_ssl = request_cfg.get("verify_ssl", True)
+
+        # HTTP client with TLS fingerprint support (curl_cffi by default)
+        self._http_client: BaseHttpClient = build_http_client(self.settings)
         
     def add_storage(self, storage: BaseStorage) -> CrawlerEngine:
         """Add a storage backend to the engine.
@@ -184,39 +186,16 @@ class CrawlerEngine:
     
     def _fetch_sync(self, request: Request) -> Optional[Response]:
         """Fetch a single request in synchronous mode and return the response.
-        
+
+        Delegates to the configured :class:`BaseHttpClient` (curl_cffi with
+        TLS fingerprint impersonation by default, or httpx fallback).
+
         Args:
             request (Request): The request to fetch.
         Returns:
             Optional[Response]: The response object if the request was successful, or None if it failed.
         """
-        with httpx.Client(
-            timeout=self._request_timeout,
-            verify=self._verify_ssl,
-            headers={"User-Agent": self._user_agent},
-        ) as client:
-            response = client.request(
-                method=request.method,
-                url=request.url,
-                headers=request.headers or None,
-                cookies=request.cookies or None,
-                params=request.params or None,
-                data=request.body,
-                json=request.json_body,
-                timeout=self._request_timeout,
-            )
-            response.raise_for_status()
-
-            return Response(
-                url=request.url,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                cookies=dict(response.cookies),
-                text=response.text,
-                body=response.content,
-                request=request,
-                encoding=response.encoding or "utf-8",
-            )
+        return self._http_client.fetch_sync(request)
 
     async def _run_async(
         self,
@@ -237,121 +216,114 @@ class CrawlerEngine:
         start_time = time.time()
         stop_event = asyncio.Event()
 
-        limits = httpx.Limits(max_connections=self._max_concurrency, max_keepalive_connections=self._max_concurrency)
-        timeout_cfg = httpx.Timeout(self._request_timeout)
+        async def drain() -> None:
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                    queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
 
-        async with httpx.AsyncClient(
-            timeout=timeout_cfg,
-            limits=limits,
-            verify=self._verify_ssl,
-            headers={"User-Agent": self._user_agent},
-        ) as client:
-            async def drain() -> None:
-                while not queue.empty():
-                    try:
-                        queue.get_nowait()
-                        queue.task_done()
-                    except asyncio.QueueEmpty:
-                        break
+        async def worker():
+            nonlocal total_requests
+            while True:
+                if stop_event.is_set():
+                    await drain()
+                    break
 
-            async def worker():
-                nonlocal total_requests
-                while True:
+                request = await queue.get()  # cancelled here → no item taken, no task_done needed
+                try:
                     if stop_event.is_set():
-                        await drain()
-                        break
+                        continue
 
-                    request = await queue.get()  # cancelled here → no item taken, no task_done needed
-                    try:
-                        if stop_event.is_set():
-                            continue
-
-                        if request.url in seen:
-                            if stop_on_duplicate:
-                                logger.info(f"Duplicate URL detected: {request.url}. Stopping.")
-                                stop_event.set()
-                            continue
-
-                        seen.add(request.url)
-                        response = await self._process_async(client, request)
-
-                        if response is None:
-                            continue
-
-                        total_requests += 1
-
-                        callback_name = request.callback or "parse"
-                        callback = getattr(crawler, callback_name, None)
-                        if callback is None:
-                            logger.warning(f"No callback method '{callback_name}' found in crawler '{crawler.name}'")
-                            continue
-
-                        for result in callback(response):
-                            if isinstance(result, Request):
-                                await queue.put(result)
-                            elif isinstance(result, Item):
-                                items.append(result)
-                                await self._store_async(result)
-                                if max_items is not None and len(items) >= max_items:
-                                    logger.info(f"Reached max_items limit of {max_items}. Stopping.")
-                                    stop_event.set()
-                            else:
-                                logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
-
-                        if timeout is not None and (time.time() - start_time) > timeout:
-                            logger.warning(f"Crawl timeout of {timeout}s reached. Stopping.")
+                    if request.url in seen:
+                        if stop_on_duplicate:
+                            logger.info(f"Duplicate URL detected: {request.url}. Stopping.")
                             stop_event.set()
+                        continue
 
-                        if self._download_delay > 0:
-                            await asyncio.sleep(self._download_delay)
+                    seen.add(request.url)
+                    response = await self._process_async(request)
 
-                    finally:
-                        queue.task_done()
+                    if response is None:
+                        continue
 
-            workers = [asyncio.create_task(worker()) for _ in range(self._max_concurrency)]
-            await queue.join()
-            for w in workers:
-                w.cancel()
+                    total_requests += 1
+
+                    callback_name = request.callback or "parse"
+                    callback = getattr(crawler, callback_name, None)
+                    if callback is None:
+                        logger.warning(f"No callback method '{callback_name}' found in crawler '{crawler.name}'")
+                        continue
+
+                    for result in callback(response):
+                        if isinstance(result, Request):
+                            await queue.put(result)
+                        elif isinstance(result, Item):
+                            items.append(result)
+                            await self._store_async(result)
+                            if max_items is not None and len(items) >= max_items:
+                                logger.info(f"Reached max_items limit of {max_items}. Stopping.")
+                                stop_event.set()
+                        else:
+                            logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
+
+                    if timeout is not None and (time.time() - start_time) > timeout:
+                        logger.warning(f"Crawl timeout of {timeout}s reached. Stopping.")
+                        stop_event.set()
+
+                    if self._download_delay > 0:
+                        await asyncio.sleep(self._download_delay)
+
+                finally:
+                    queue.task_done()
+
+        workers = [asyncio.create_task(worker()) for _ in range(self._max_concurrency)]
+        await queue.join()
+        for w in workers:
+            w.cancel()
 
         logger.info(f"Successfully processed {total_requests} requests.")
         logger.info(f"Total requests made: {total_requests}")
         logger.info(f"Total items collected: {len(items)}")
         return items
     
-    async def _process_async(self, client: httpx.AsyncClient, request: Request) -> Optional[Response]:
+    async def _process_async(self, *args, **kwargs) -> Optional[Response]:
+        """Process async request with retries. Supports both legacy (client, request) and new (request) signatures."""
+        if len(args) == 2:
+            request = args[1]
+        elif len(args) == 1:
+            request = args[0]
+        else:
+            request = kwargs.get("request") or kwargs.get("client")
         for attempt in range(1, self._max_retries + 1):
             try:
-                return await self._fetch_async(client, request)
+                # Dispatch to _fetch_async compatibly: try legacy (client, request) first,
+                # fallback to single-arg (request) for any implementation.
+                try:
+                    return await self._fetch_async(None, request)
+                except TypeError:
+                    return await self._fetch_async(request)
             except Exception as e:
-                last_exception = e
                 logger.warning(f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}")
                 await asyncio.sleep(min(2 ** attempt, 10))
         
         logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
         return None
-    
-    async def _fetch_async(self, client: httpx.AsyncClient, request: Request) -> Optional[Response]:
-        response = await client.request(
-            method=request.method,
-            url=request.url,
-            headers=request.headers or None,
-            cookies=request.cookies or None,
-            params=request.params or None,
-            data=request.body,
-            json=request.json_body,
-        )
-        response.raise_for_status()
 
-        return Response(
-            url=request.url,
-            status_code=response.status_code,
-            headers=dict(response.headers),
-            cookies=dict(response.cookies),
-            text=response.text,
-            body=response.content,
-            request=request,
-            encoding=response.encoding or "utf-8",
-        )
+    async def _fetch_async(self, *args, **kwargs) -> Optional[Response]:
+        """Fetch async request. Supports legacy (client, request) for test monkeypatch compatibility."""
+        if len(args) == 2:
+            # legacy: (client, request) — client is ignored, use http_client
+            request = args[1]
+        elif len(args) == 1:
+            request = args[0]
+        else:
+            request = kwargs.get("request") or kwargs.get("client")
+        # Handle explicit None placeholder from _process_async legacy path
+        if request is None and len(args) == 2 and args[0] is not None and hasattr(args[0], "url"):
+            request = args[0]
+        return await self._http_client.fetch_async(request)
   
     def _store(self, item: Item) -> None:
         """Save an item using all configured storage backends."""
@@ -374,6 +346,10 @@ class CrawlerEngine:
                 storage.close()
             except Exception as e:
                 pass
+        try:
+            self._http_client.close()
+        except Exception:
+            pass
             
         logger.info("Crawler engine resources have been cleaned up.")
 
