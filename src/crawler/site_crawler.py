@@ -86,15 +86,15 @@ class SiteCrawler(BaseCrawler):
             return supports(src, "category")
 
         def defaults_of(src: Dict[str, Any]) -> Dict[str, Any]:
-            base = {k: v for k, v in self._list_cfg.items() if k in ("method", "type", "selectors", "pagination")}
+            base = {k: v for k, v in self._list_cfg.items() if k in ("method", "type", "extract", "pagination")}
             merged = dict(base)
             for key in ("method", "type", "pagination"):
                 if key in src:
                     merged[key] = src[key]
-            if "selectors" in src:
-                base_selectors = dict(base.get("selectors", {}))
-                base_selectors.update(src["selectors"])
-                merged["selectors"] = base_selectors
+            if "extract" in src:
+                base_extract = dict(base.get("extract", {}))
+                base_extract.update(src["extract"])
+                merged["extract"] = base_extract
             merged["url"] = src["url"]
             return merged
 
@@ -245,19 +245,19 @@ class SiteCrawler(BaseCrawler):
 
         cfg = self._select_list_cfg()
         list_type = cfg.get("type", "html")
-        selectors = cfg.get("selectors", {})
+        extract = cfg.get("extract", {})
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
         
         if list_type == "json":
-            yield from self._parse_json_list(response, selectors, headers, cookies)
+            yield from self._parse_json_list(response, extract, headers, cookies)
         else:
-            yield from self._parse_html_list(response, selectors, headers, cookies)
+            yield from self._parse_html_list(response, extract, headers, cookies)
             
     def _parse_html_list(
         self, 
         response: Response, 
-        selectors: Dict[str, Any], 
+        extract: Dict[str, Any], 
         headers: dict, 
         cookies: dict
     ) -> Generator[Union[Request, Item], None, None]:
@@ -265,9 +265,9 @@ class SiteCrawler(BaseCrawler):
         
         parser = HTMLParser(response.text)
         
-        items_selector = selectors.get("items", "a")
-        link_selector = selectors.get("link", "a")
-        link_attr = selectors.get("link_attr", "href")
+        items_selector = extract.get("item_selector", "a")
+        link_selector = extract.get("link_selector", "a")
+        link_attr = extract.get("link_attr", "href")
         
         for item_elem in parser.select(items_selector):
             link_elem = item_elem.select_one(link_selector) if link_selector != items_selector else item_elem
@@ -299,16 +299,16 @@ class SiteCrawler(BaseCrawler):
     def _parse_json_list(
         self,
         response: Response,
-        selectors: Dict[str, Any],
+        extract: Dict[str, Any],
         headers: Dict,
         cookies: Dict,
     ) -> Generator[Union[Item, Request], None, None]:
         """Parse a JSON list response and yield article requests or items."""
         parser = JSONParser(response.text)
 
-        items_path = selectors.get("items", "")
-        url_field = selectors.get("url_field", "url")
-        url_template = selectors.get("url_template", "{url}")
+        items_path = extract.get("items_path", "")
+        url_field = extract.get("url_field", "url")
+        url_template = extract.get("url_template", "{url}")
 
         items = parser.extract_path(items_path) if items_path else parser.data
         if not isinstance(items, list):
@@ -349,12 +349,12 @@ class SiteCrawler(BaseCrawler):
             return
 
         article_type = self._article_cfg.get("type", "html")
-        selectors = self._article_cfg.get("selectors", {})
+        fields = self._article_cfg.get("fields", {})
 
         if article_type == "json":
-            data = self._extract_article_json(response, selectors)
+            data = self._extract_article_json(response, fields)
         else:
-            data = self._extract_article_html(response, selectors)
+            data = self._extract_article_html(response, fields)
 
         data.setdefault("url", response.url)
 
@@ -375,13 +375,13 @@ class SiteCrawler(BaseCrawler):
         
 
     def _extract_article_html(
-        self, response: Response, selectors: Dict[str, Any]
+        self, response: Response, fields: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Extract fields from an HTML article page using the provided selectors."""
+        """Extract fields from an HTML article page using the provided fields."""
         parser = HTMLParser(response.text)
         data: Dict[str, Any] = {}
 
-        for field_name, field_cfg in selectors.items():
+        for field_name, field_cfg in fields.items():
             if isinstance(field_cfg, str):
                 value = parser.extract_text(field_cfg)
             elif isinstance(field_cfg, dict):
@@ -402,13 +402,13 @@ class SiteCrawler(BaseCrawler):
         return data
 
     def _extract_article_json(
-        self, response: Response, selectors: Dict[str, Any]
+        self, response: Response, fields: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Extract fields from a JSON article page using the provided selectors."""
+        """Extract fields from a JSON article page using the provided fields."""
         parser = JSONParser(response.text)
         data: Dict[str, Any] = {}
 
-        for field_name, field_cfg in selectors.items():
+        for field_name, field_cfg in fields.items():
             if isinstance(field_cfg, str):
                 value = parser.extract_path(field_cfg)
             elif isinstance(field_cfg, dict):
@@ -428,20 +428,27 @@ class SiteCrawler(BaseCrawler):
         """Extract a field value based on the configuration."""
         try:
             if isinstance(field_cfg, dict):
-                field_type = field_cfg.get("type")
+                field_as = field_cfg.get("as")
                 
-                if field_type == "datetime":
+                if field_as == "datetime":
                     date_format = field_cfg.get("datetime_format")
                     if date_format:
                         return datetime.strptime(value, date_format)
                     else:
                         return datetime.fromisoformat(value)            
-                elif field_type == "text":
+                elif field_as == "text":
                     regex = field_cfg.get("regex")
                     if regex:
                         match = re.search(regex, value)
                         value = "/".join(match.groups()) if match else value
                     return value.strip()
+                elif field_as is None:
+                    # raw: apply regex if present but keep as-is otherwise
+                    regex = field_cfg.get("regex")
+                    if regex:
+                        match = re.search(regex, value)
+                        value = "/".join(match.groups()) if match else value
+                    return value
                 
             return value
         except Exception as e:

@@ -18,14 +18,11 @@ class Classifier:
     category value is then normalized through an optional global mapping to
     produce the ``normalized_category`` list.
 
-    Supported source types:
-        url:          extract a value from the article URL using a regex.
-        meta:         read a <meta> tag content by name or property.
-        selector:     extract a CSS selector value (text or attribute).
-        json_ld:      read a value from the first JSON-LD script block.
-        list_data:    read a value from the list item data (meta.list_data).
-        article_json: read a value from the article JSON response body.
-        keyword:      match keywords in title/content and return rule values.
+    Supported source types (``source`` field):
+        url:     extract a value from the article URL using a regex; ``split`` to divide.
+        html:    extract from article HTML via CSS selector; ``attr``/``multiple``/``join``/``split``.
+        json:    extract from a JSON data source (``from``: json_ld | list_data | article_json) via ``path``; ``split`` to divide.
+        keyword: match keywords in title/content and return rule values.
     """
 
     def __init__(
@@ -102,7 +99,7 @@ class Classifier:
     def _extract_source(
         self, response: Any, data: Dict[str, Any], source: Dict[str, Any]
     ) -> Any:
-        stype = source.get("type")
+        stype = source.get("source")
         handler = getattr(self, f"_extract_{stype}", None)
         if not handler:
             logger.warning(f"Unknown classifier source type: {stype}")
@@ -122,65 +119,61 @@ class Classifier:
             return None
         return match.group(1) if match.groups() else match.group(0)
 
-    def _extract_meta(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Optional[str]:
-        name = source.get("name")
-        prop = source.get("property")
-        if name:
-            selector = f'meta[name="{name}"]'
-        elif prop:
-            selector = f'meta[property="{prop}"]'
-        else:
-            return None
-        parser = HTMLParser(response.text)
-        elem = parser.select_one(selector)
-        if not elem:
-            return None
-        return elem.get("content")
-
-    def _extract_selector(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Optional[str]:
+    def _extract_html(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
         selector = source.get("selector")
         if not selector:
             return None
         parser = HTMLParser(response.text)
         attr = source.get("attr", "text")
         join = source.get("join")
-        if join:
+        multiple = source.get("multiple")
+        if join is not None and multiple:
+            logger.warning("Classifier html source has both 'join' and 'multiple'; 'join' takes precedence.")
+        if join is not None:
             values = []
             for el in parser.select(selector):
                 value = el.get_text(strip=True) if attr == "text" else el.get(attr)
                 if value:
                     values.append(str(value).strip())
             return join.join(values) if values else None
+        if multiple:
+            values = []
+            for el in parser.select(selector):
+                value = el.get_text(strip=True) if attr == "text" else el.get(attr)
+                if value:
+                    values.append(str(value).strip())
+            return values if values else None
         return parser.extract(selector, attr)
 
-    def _extract_json_ld(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
+    def _extract_json(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
+        from_ = source.get("from")
         path = source.get("path")
-        parser = HTMLParser(response.text)
-        for script in parser.select('script[type="application/ld+json"]'):
-            raw = script.get_text(strip=True).strip("<!--").strip("-->")
-            try:
-                ld_data = json.loads(raw)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            value = JSONParser(ld_data).extract_path(path) if path else ld_data
-            if value:
-                return value
-        return None
-
-    def _extract_list_data(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
-        path = source.get("path")
-        meta = response.meta or {}
-        list_data = meta.get("list_data")
-        if list_data is None:
+        if from_ == "json_ld":
+            parser = HTMLParser(response.text)
+            for script in parser.select('script[type="application/ld+json"]'):
+                raw = script.get_text(strip=True).strip("<!--").strip("-->")
+                try:
+                    ld_data = json.loads(raw)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                value = JSONParser(ld_data).extract_path(path) if path else ld_data
+                if value:
+                    return value
             return None
-        if path:
-            return JSONParser(list_data).extract_path(path)
-        return list_data
-
-    def _extract_article_json(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
-        path = source.get("path")
-        parser = JSONParser(response.text)
-        return parser.extract_path(path) if path else parser.data
+        elif from_ == "list_data":
+            meta = response.meta or {}
+            list_data = meta.get("list_data")
+            if list_data is None:
+                return None
+            if path:
+                return JSONParser(list_data).extract_path(path)
+            return list_data
+        elif from_ == "article_json":
+            parser = JSONParser(response.text)
+            return parser.extract_path(path) if path else parser.data
+        else:
+            logger.warning(f"Unknown json source 'from': {from_}")
+            return None
 
     def _extract_keyword(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> List[Optional[str]]:
         text = " ".join(str(data.get(k, "") or "") for k in ("title", "content"))
