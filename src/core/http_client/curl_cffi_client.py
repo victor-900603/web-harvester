@@ -79,6 +79,24 @@ class CurlCffiClient(BaseHttpClient):
         except Exception:
             return {}
 
+    def _build_response(self, request: Request, resp: Any) -> Response:
+        self._raise_for_status(request, resp.status_code, dict(resp.headers), resp.text)
+        headers = self._headers_to_dict(resp.headers)
+        cookies = self._cookies_to_dict(getattr(resp, "cookies", {}))
+        encoding = getattr(resp, "encoding", None) or "utf-8"
+        text = resp.text if isinstance(resp.text, str) else resp.content.decode(encoding, errors="replace") if resp.content else ""
+        body = resp.content if hasattr(resp, "content") else text.encode(encoding)
+        return Response(
+            url=request.url,
+            status_code=resp.status_code,
+            headers=headers,
+            cookies=cookies,
+            text=text,
+            body=body,
+            request=request,
+            encoding=encoding,
+        )
+
     def fetch_sync(self, request: Request) -> Response:
         try:
             from curl_cffi import requests as crequests
@@ -100,24 +118,7 @@ class CurlCffiClient(BaseHttpClient):
                 json=request.json_body,
                 timeout=self._timeout,
             )
-            self._raise_for_status(request, resp.status_code, dict(resp.headers), resp.text)
-
-            headers = self._headers_to_dict(resp.headers)
-            cookies = self._cookies_to_dict(getattr(resp, "cookies", {}))
-            encoding = getattr(resp, "encoding", None) or "utf-8"
-            text = resp.text if isinstance(resp.text, str) else resp.content.decode(encoding, errors="replace") if resp.content else ""
-            body = resp.content if hasattr(resp, "content") else text.encode(encoding)
-
-            return Response(
-                url=request.url,
-                status_code=resp.status_code,
-                headers=headers,
-                cookies=cookies,
-                text=text,
-                body=body,
-                request=request,
-                encoding=encoding,
-            )
+            return self._build_response(request, resp)
 
     async def fetch_async(self, request: Request) -> Response:
         try:
@@ -140,21 +141,4 @@ class CurlCffiClient(BaseHttpClient):
                 json=request.json_body,
                 timeout=self._timeout,
             )
-            self._raise_for_status(request, resp.status_code, dict(resp.headers), resp.text)
-
-            headers = self._headers_to_dict(resp.headers)
-            cookies = self._cookies_to_dict(getattr(resp, "cookies", {}))
-            encoding = getattr(resp, "encoding", None) or "utf-8"
-            text = resp.text if isinstance(resp.text, str) else resp.content.decode(encoding, errors="replace") if resp.content else ""
-            body = resp.content if hasattr(resp, "content") else text.encode(encoding)
-
-            return Response(
-                url=request.url,
-                status_code=resp.status_code,
-                headers=headers,
-                cookies=cookies,
-                text=text,
-                body=body,
-                request=request,
-                encoding=encoding,
-            )
+            return self._build_response(request, resp)
