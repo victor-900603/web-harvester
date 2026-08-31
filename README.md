@@ -6,6 +6,7 @@
 
 - **設定檔驅動**：透過 YAML 定義爬蟲行為，無需修改程式碼即可新增目標網站
 - **雙執行模式**：支援同步（`sync`）與非同步（`async`）兩種模式
+- **TLS 指紋偽裝**：基於 `curl_cffi` 的瀏覽器指紋模擬（JA3/Akamai），支援 `chrome`/`safari`/`firefox`/`edge`  impersonate 與自訂 `ja3`/`akamai`，預設 `chrome131`，可切回 `httpx`
 - **複合解析器**：可解析 HTML（BeautifulSoup）與 JSON 格式的列表頁與文章頁
 - **多種儲存後端**：JSON 檔案、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
 - **分頁爬取**：自動依設定逐頁取得列表
@@ -33,7 +34,7 @@ web-harvester/
 │   ├── logging.md          # 日誌設定說明
 │   └── storage.md          # 儲存設定說明
 ├── src/
-│   ├── core/               # 核心引擎（Engine、Request、Response、Item）
+│   ├── core/               # 核心引擎（Engine、Request、Response、Item、HttpClient）
 │   ├── crawler/            # 爬蟲邏輯（BaseCrawler、SiteCrawler）
 │   ├── parsers/            # 解析器（HTMLParser、JSONParser）
 │   ├── storage/            # 儲存後端（JSON、Database）
@@ -171,7 +172,7 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 
 | 套件 | 用途 |
 |------|------|
-| `requests` / `aiohttp` / `httpx` | HTTP 請求 |
+| `curl_cffi`（預設）/ `httpx`（備援） | HTTP 請求與 TLS 指紋偽裝 |
 | `beautifulsoup4` + `lxml` | HTML 解析 |
 | `PyYAML` | 設定檔讀取 |
 | `jsonschema` | 設定檔 Schema 驗證 |
