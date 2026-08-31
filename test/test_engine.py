@@ -117,6 +117,10 @@ class TestSyncLimits:
         assert len(calls) == 3
 
     def test_fetch_sync_sets_body_for_json(self, monkeypatch):
+        # Engine now delegates to http_client; test via httpx path explicitly
+        from src.core.http_client import HttpxClient
+        from src.core import Response as CoreResponse
+
         class FakeResponse:
             status_code = 200
             encoding = "utf-8"
@@ -142,10 +146,55 @@ class TestSyncLimits:
                 return FakeResponse()
 
         monkeypatch.setattr(httpx, "Client", FakeClient)
+        # Force httpx client regardless of default curl_cffi
+        client = HttpxClient(timeout=5, verify_ssl=True, user_agent="test/1.0")
         engine = make_engine("sync")
+        # inject httpx client
+        engine._http_client = client
         resp = engine._fetch_sync(Request(url="https://e.com/a"))
         assert resp is not None
         assert resp.json() == {"ok": True}
+
+        # Also verify CurlCffiClient path with mocked session
+        import sys
+        import types
+
+        class FakeCurlResp:
+            status_code = 200
+            headers = {"Content-Type": "application/json"}
+            cookies = {}
+            text = '{"ok": true}'
+            content = b'{"ok": true}'
+            encoding = "utf-8"
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def request(self, **kwargs):
+                return FakeCurlResp()
+
+        fake_crequests = types.ModuleType("curl_cffi.requests")
+        fake_crequests.Session = FakeSession
+        fake_curl = types.ModuleType("curl_cffi")
+        fake_curl.requests = fake_crequests
+        monkeypatch.setitem(sys.modules, "curl_cffi", fake_curl)
+        monkeypatch.setitem(sys.modules, "curl_cffi.requests", fake_crequests)
+
+        from src.core.http_client import CurlCffiClient
+
+        curl_client = CurlCffiClient(impersonate="chrome131")
+        engine2 = make_engine("sync")
+        engine2._http_client = curl_client
+        resp2 = engine2._fetch_sync(Request(url="https://e.com/a"))
+        assert resp2 is not None
+        assert resp2.json() == {"ok": True}
 
 
 class TestAsyncLimits:
