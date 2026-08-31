@@ -28,14 +28,15 @@ def setup_logging(
         log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     color_log_format = "%(log_color)s" + log_format
         
+    level_no = getattr(logging, level.upper())
     main_logger = logging.getLogger()
-    main_logger.setLevel(getattr(logging, level.upper()))
-    
+    main_logger.setLevel(level_no)
+
     main_logger.handlers.clear()
-    
+
     # Console handler with color
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, level.upper()))
+    console_handler.setLevel(level_no)
     console_formatter = ColoredFormatter(
         color_log_format,
         log_colors={
@@ -57,10 +58,9 @@ def setup_logging(
             backupCount=backup_count, 
             encoding='utf-8', 
         )
-        file_handler.setLevel(getattr(logging, level.upper()))
+        file_handler.setLevel(level_no)
         file_handler.setFormatter(logging.Formatter(log_format))
         main_logger.addHandler(file_handler)
-        
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("curl_cffi").setLevel(logging.WARNING)
+
+    for _name in ("urllib3", "httpcore", "curl_cffi"):
+        logging.getLogger(_name).setLevel(logging.WARNING)
