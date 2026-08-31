@@ -44,7 +44,7 @@ def sample_site_config() -> dict:
         },
         "list_page": {
             "type": "html",
-            "selectors": {"items": "article.news-item", "link": "a", "link_attr": "href"},
+            "extract": {"item_selector": "article.news-item", "link_selector": "a", "link_attr": "href"},
             "pagination": {"enabled": True, "start": 1},
             "sources": [
                 {"url": "https://example.com/news?page={page}"},
@@ -52,16 +52,16 @@ def sample_site_config() -> dict:
         },
         "article_page": {
             "type": "html",
-            "selectors": {
+            "fields": {
                 "title": "h1.article-title",
-                "content": {"type": "text", "selector": "div.article-body", "attr": "text"},
+                "content": {"as": "text", "selector": "div.article-body", "attr": "text"},
                 "published_at": {
-                    "type": "datetime",
+                    "as": "datetime",
                     "selector": "time.publish-date",
                     "attr": "datetime",
                     "datetime_format": "%Y-%m-%dT%H:%M:%S",
                 },
-                "author": {"type": "text", "selector": "span.author-name", "attr": "text"},
+                "author": {"as": "text", "selector": "span.author-name", "attr": "text"},
             },
         },
     }
