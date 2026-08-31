@@ -288,41 +288,20 @@ class CrawlerEngine:
         logger.info(f"Total items collected: {len(items)}")
         return items
     
-    async def _process_async(self, *args, **kwargs) -> Optional[Response]:
-        """Process async request with retries. Supports both legacy (client, request) and new (request) signatures."""
-        if len(args) == 2:
-            request = args[1]
-        elif len(args) == 1:
-            request = args[0]
-        else:
-            request = kwargs.get("request") or kwargs.get("client")
+    async def _process_async(self, request: Request) -> Optional[Response]:
+        """Process async request with retries."""
         for attempt in range(1, self._max_retries + 1):
             try:
-                # Dispatch to _fetch_async compatibly: try legacy (client, request) first,
-                # fallback to single-arg (request) for any implementation.
-                try:
-                    return await self._fetch_async(None, request)
-                except TypeError:
-                    return await self._fetch_async(request)
+                return await self._fetch_async(request)
             except Exception as e:
                 logger.warning(f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}")
                 await asyncio.sleep(min(2 ** attempt, 10))
-        
+
         logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
         return None
 
-    async def _fetch_async(self, *args, **kwargs) -> Optional[Response]:
-        """Fetch async request. Supports legacy (client, request) for test monkeypatch compatibility."""
-        if len(args) == 2:
-            # legacy: (client, request) — client is ignored, use http_client
-            request = args[1]
-        elif len(args) == 1:
-            request = args[0]
-        else:
-            request = kwargs.get("request") or kwargs.get("client")
-        # Handle explicit None placeholder from _process_async legacy path
-        if request is None and len(args) == 2 and args[0] is not None and hasattr(args[0], "url"):
-            request = args[0]
+    async def _fetch_async(self, request: Request) -> Optional[Response]:
+        """Fetch async request via the configured HTTP client."""
         return await self._http_client.fetch_async(request)
   
     def _store(self, item: Item) -> None:

@@ -228,7 +228,7 @@ class TestAsyncLimits:
         assert len(items) == 3
 
     def test_timeout_stops_early(self, monkeypatch):
-        async def slow_fetch(self, client, request):
+        async def slow_fetch(self, request):
             await asyncio.sleep(0.05)
             return _response(request)
 
@@ -269,5 +269,5 @@ def _fake_sync_process(self, request):
     return _response(request)
 
 
-async def _fake_async_fetch(self, client, request):
+async def _fake_async_fetch(self, request):
     return _response(request)
