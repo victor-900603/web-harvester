@@ -98,17 +98,19 @@ class SiteCrawler(BaseCrawler):
             merged["url"] = src["url"]
             return merged
 
-        default = next((s for s in sources if not has_keyword(s)), sources[0])
+        def _pick(pred) -> Optional[Dict[str, Any]]:
+            return next((s for s in sources if pred(s)), None)
 
+        default = _pick(lambda s: not has_keyword(s)) or sources[0]
         keyword = self._keyword
         category = self._category
 
         if keyword and category:
-            exact = next((s for s in sources if has_keyword(s) and has_category(s)), None)
+            exact = _pick(lambda s: has_keyword(s) and has_category(s))
             if exact:
                 result = defaults_of(exact)
             else:
-                kw_source = next((s for s in sources if has_keyword(s)), None)
+                kw_source = _pick(has_keyword)
                 if kw_source:
                     logger.warning(
                         "Keyword and category requested but no source supports both; "
@@ -116,7 +118,7 @@ class SiteCrawler(BaseCrawler):
                     )
                     result = defaults_of(kw_source)
                 else:
-                    cat_source = next((s for s in sources if has_category(s)), None)
+                    cat_source = _pick(has_category)
                     if cat_source:
                         logger.warning(
                             "Keyword and category requested but no source supports both; "
@@ -127,22 +129,22 @@ class SiteCrawler(BaseCrawler):
                         logger.warning("Neither keyword nor category is supported by any source; using the default list.")
                         result = defaults_of(default)
         elif keyword:
-            exact = next((s for s in sources if has_keyword(s) and not has_category(s)), None)
+            exact = _pick(lambda s: has_keyword(s) and not has_category(s))
             if exact:
                 result = defaults_of(exact)
             else:
-                source = next((s for s in sources if has_keyword(s)), None)
+                source = _pick(has_keyword)
                 if source:
                     result = defaults_of(source)
                 else:
                     logger.warning("Keyword search requested but no source supports {keyword}; using the default list.")
                     result = defaults_of(default)
         elif category:
-            exact = next((s for s in sources if has_category(s) and not has_keyword(s)), None)
+            exact = _pick(lambda s: has_category(s) and not has_keyword(s))
             if exact:
                 result = defaults_of(exact)
             else:
-                source = next((s for s in sources if has_category(s)), None)
+                source = _pick(has_category)
                 if source:
                     result = defaults_of(source)
                 else:
