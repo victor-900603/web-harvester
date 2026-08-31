@@ -19,6 +19,10 @@ engine:
 request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true
+  http_client: "curl_cffi"    # curl_cffi（預設，支援 TLS 指紋） | httpx（備援）
+  impersonate: "chrome131"    # 瀏覽器偽裝，需 http_client=curl_cffi；"" 表示停用
+  # ja3: ""                   # 自訂 JA3，僅 impersonate="" 時生效
+  # akamai: ""                # 自訂 Akamai，僅 impersonate="" 時生效
 
 limits:
   max_items: 100
@@ -54,8 +58,14 @@ category_normalization: {}
 
 | 欄位 | 說明 | 預設值 |
 |------|------|--------|
-| `request.user_agent` | 全域請求的 User-Agent，會自動套用到所有請求 | `web-harvester/1.0` |
+| `request.user_agent` | 全域請求的 User-Agent，未啟用 impersonate 時套用到所有請求；啟用 impersonate 時由瀏覽器指紋覆蓋 | `web-harvester/1.0` |
 | `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
+| `request.http_client` | HTTP 實作：`curl_cffi`（預設，支援 TLS 指紋偽裝）或 `httpx`（備援，無偽裝）；`curl_cffi` 未安裝時自動回落至 `httpx` | `curl_cffi` |
+| `request.impersonate` | 瀏覽器偽裝目標，僅 `http_client=curl_cffi` 時生效；`""` 表示停用 | `chrome131` |
+| `request.ja3` | 自訂 JA3 字串，僅 `impersonate=""` 且 `http_client=curl_cffi` 時生效；有 impersonate 時被忽略並記 warning | - |
+| `request.akamai` | 自訂 Akamai HTTP/2 指紋，僅 `impersonate=""` 且 `http_client=curl_cffi` 時生效 | - |
+
+支援的 `impersonate` 枚舉（`config/schema/settings.schema.json`）：`chrome99`/`chrome100`/`chrome101`/`chrome104`/`chrome107`/`chrome110`/`chrome116`/`chrome119`/`chrome120`/`chrome122`/`chrome124`/`chrome131`/`chrome131_android`/`safari15_3`/`safari15_5`/`safari17_0`/`safari17_2_ios`/`safari18_0`/`safari18_0_ios`/`firefox133`/`edge101`/`edge122`/`""`。實作位於 `src/core/http_client/factory.py:build_http_client` / `src/core/http_client/curl_cffi_client.py:CurlCffiClient`（常數見 `constants.py`，抽象見 `base.py`），引擎透過 `CrawlerEngine._http_client` 委派（`src/core/engine.py`）。
 
 ### limits
 
