@@ -1,0 +1,88 @@
+# ============================================================
+# 中時新聞網設定
+# ============================================================
+
+name: "中時新聞網"
+base_url: "https://www.chinatimes.com"
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0"
+    Referer: "https://www.chinatimes.com"
+
+list_page:
+  type: "html"
+
+  extract:
+    item_selector: "ul.vertical-list li"
+    link_selector: ".title a"
+    link_attr: "href"
+
+  pagination:
+    enabled: true
+    start: 1
+
+  sources:
+    - url: "https://www.chinatimes.com/realtimenews?page={page}&chdtv"
+
+    - url: "https://www.chinatimes.com/{category}/total?page={page}&chdtv"
+
+    - url: "https://www.chinatimes.com/search/{keyword}?page={page}&chdtv"
+
+  categories:
+    "政治": "politic"
+    "國際": "world"
+    "財經": "money"
+    "生活": "life"
+    "言論": "opinion"
+    "社會": "society"
+    "娛樂": "star"
+    "兩岸": "chinese"
+    "軍事": "armament"
+    "健康": "health"
+    "體育": "sports"
+    "科技": "technologynews"
+    "有影": "tube"
+    "寶島": "taiwan"
+
+# 文章頁設定
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1.article-title"
+
+    content:
+      as: "text"
+      selector: "div.article-body"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: "meta[name='pubdate']"
+      attr: "content"
+      datetime_format: "%Y-%m-%dT%H:%M:%S+08:00"
+
+    author:
+      as: "text"
+      selector: ".author"
+      attr: "text"
+
+category:
+  sources:
+    - source: "html"
+      selector: ".breadcrumb-item:last-child span"
+      attr: "text"
+
+    - source: "html"
+      selector: 'meta[name="section"]'
+      attr: "content"
+
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: ".hash-tag a"
+      attr: "text"
+      multiple: true
