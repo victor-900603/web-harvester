@@ -129,9 +129,11 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 
 最小範例請見 `config/sites/example.yaml`。完整欄位、範例與選項說明請見 [docs/site-config.md](docs/site-config.md)，包含：
 
-- 完整 YAML 範例（含 `limits` 選用覆寫、`list_page` / `article_page` 全部欄位）
-- Selector 類型與 `regex` 用法
-- Schema 驗證規則
+- 頂層欄位速查與最小/完整 YAML 範例
+- `limits` / `request` / `list_page`（繼承模型、sources、extract、pagination、categories）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
+- 分類與標籤（`category` / `tags` / `category_normalization`，4 種來源 `source: html|url|json|keyword` 與 `json.from` 對照）
+- 搜尋與篩選（`{page}` / `{keyword}` / `{category}` 佔位符與來源選擇決策表）
+- 驗證與除錯（常見 `ConfigValidationError` 對照）
 
 新增或修改網站設定後，可直接執行 `python main.py --site <site_id>`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
 
