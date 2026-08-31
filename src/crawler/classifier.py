@@ -44,21 +44,24 @@ class Classifier:
         tags = self._resolve_tags(response, data)
         return categories, normalized, tags
 
-    def _resolve_categories(self, response: Any, data: Dict[str, Any]) -> List[str]:
-        categories: List[str] = []
-        for source in self._category_cfg.get("sources", []):
-            value = self._extract_source(response, data, source)
-            if value is None:
+    def _resolve_sources(self, cfg: Dict[str, Any], response: Any, data: Dict[str, Any]) -> List[str]:
+        values: List[str] = []
+        for source in cfg.get("sources", []):
+            raw = self._extract_source(response, data, source)
+            if raw is None:
                 continue
-            if source.get("split") and isinstance(value, str):
-                values = [v.strip() for v in value.split(source["split"]) if v.strip()]
-            elif isinstance(value, list):
-                values = [str(v).strip() for v in value if v]
+            if source.get("split") and isinstance(raw, str):
+                parts = [v.strip() for v in raw.split(source["split"]) if v.strip()]
+            elif isinstance(raw, list):
+                parts = [str(v).strip() for v in raw if v]
             else:
-                values = [str(value).strip()] if str(value).strip() else []
-            values = self._apply_mapping(values, source)
-            categories.extend(values)
-        categories = self._dedupe(categories)
+                parts = [str(raw).strip()] if str(raw).strip() else []
+            parts = self._apply_mapping(parts, source)
+            values.extend(parts)
+        return self._dedupe(values)
+
+    def _resolve_categories(self, response: Any, data: Dict[str, Any]) -> List[str]:
+        categories = self._resolve_sources(self._category_cfg, response, data)
         if not categories and self._category_cfg.get("default"):
             categories = [str(self._category_cfg["default"]).strip()]
         return categories
@@ -81,20 +84,7 @@ class Classifier:
         return result
 
     def _resolve_tags(self, response: Any, data: Dict[str, Any]) -> List[str]:
-        tags: List[str] = []
-        for source in self._tags_cfg.get("sources", []):
-            value = self._extract_source(response, data, source)
-            if value is None:
-                continue
-            if source.get("split") and isinstance(value, str):
-                values = [v.strip() for v in value.split(source["split"]) if v.strip()]
-            elif isinstance(value, list):
-                values = [str(v).strip() for v in value if v]
-            else:
-                values = [str(value).strip()] if str(value).strip() else []
-            values = self._apply_mapping(values, source)
-            tags.extend(values)
-        return self._dedupe(tags)
+        return self._resolve_sources(self._tags_cfg, response, data)
 
     def _extract_source(
         self, response: Any, data: Dict[str, Any], source: Dict[str, Any]
@@ -129,20 +119,15 @@ class Classifier:
         multiple = source.get("multiple")
         if join is not None and multiple:
             logger.warning("Classifier html source has both 'join' and 'multiple'; 'join' takes precedence.")
-        if join is not None:
+        if join is not None or multiple:
             values = []
             for el in parser.select(selector):
                 value = el.get_text(strip=True) if attr == "text" else el.get(attr)
                 if value:
                     values.append(str(value).strip())
-            return join.join(values) if values else None
-        if multiple:
-            values = []
-            for el in parser.select(selector):
-                value = el.get_text(strip=True) if attr == "text" else el.get(attr)
-                if value:
-                    values.append(str(value).strip())
-            return values if values else None
+            if not values:
+                return None
+            return join.join(values) if join is not None else values
         return parser.extract(selector, attr)
 
     def _extract_json(self, response: Any, data: Dict[str, Any], source: Dict[str, Any]) -> Any:
