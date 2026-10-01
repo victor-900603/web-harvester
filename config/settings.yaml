@@ -11,7 +11,15 @@ engine:
   max_concurrency: 10         # Maximum number of concurrent requests
   request_timeout: 30         # Request timeout in seconds
   download_delay: 1.0         # Delay between requests to the same domain in seconds
-  max_retries: 3              # Maximum number of retries for failed requests
+  max_retries: 3              # Maximum number of attempts for failed requests (retryable errors only)
+  # Exponential backoff between retries. Only retryable failures are retried
+  # (HTTP 408/429/5xx, timeouts and network errors); other 4xx fail fast.
+  retry:
+    base_delay: 1.0           # Delay before the first retry (seconds)
+    max_delay: 30.0           # Upper bound for any single backoff delay (seconds)
+    multiplier: 2.0           # Growth factor per attempt
+    jitter: "full"            # none | full | equal (randomize to avoid thundering herd)
+    respect_retry_after: true # Honor the Retry-After header, capped at max_delay
 
 # Global HTTP request settings applied to every request.
 request:

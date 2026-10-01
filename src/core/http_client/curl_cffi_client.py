@@ -58,7 +58,11 @@ class CurlCffiClient(BaseHttpClient):
         raise httpx.HTTPStatusError(
             f"{status_code} Client Error for url: {request.url}",
             request=httpx.Request(request.method, request.url),
-            response=httpx.Response(status_code, request=httpx.Request(request.method, request.url)),
+            response=httpx.Response(
+                status_code,
+                headers=headers,
+                request=httpx.Request(request.method, request.url),
+            ),
         )
 
     @staticmethod
