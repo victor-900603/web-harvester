@@ -42,6 +42,36 @@
         "max_retries": {
           "type": "integer",
           "minimum": 0
+        },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "base_delay": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Delay before the first retry in seconds."
+            },
+            "max_delay": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Upper bound for any single backoff delay in seconds."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Exponential growth factor per attempt."
+            },
+            "jitter": {
+              "type": "string",
+              "enum": ["none", "full", "equal"],
+              "description": "Randomization applied to the computed delay."
+            },
+            "respect_retry_after": {
+              "type": "boolean",
+              "description": "Honor the Retry-After header, capped at max_delay."
+            }
+          }
         }
       },
       "required": ["mode"]

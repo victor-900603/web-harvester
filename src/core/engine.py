@@ -12,6 +12,7 @@ from .http_client import BaseHttpClient, build_http_client
 from .request import Request
 from .response import Response
 from .item import Item
+from .retry import BackoffPolicy, is_retryable
 
 from ..storage import BaseStorage, JSONStorage, DatabaseStorage
 from ..utils.config import Settings
@@ -40,6 +41,7 @@ class CrawlerEngine:
         self._request_timeout = engine_cfg.get("request_timeout", 30)
         self._download_delay = engine_cfg.get("download_delay", 1.0)
         self._max_retries = engine_cfg.get("max_retries", 3)
+        self._retry_policy = BackoffPolicy.from_settings(engine_cfg.get("retry"))
 
         # global request configuration
         request_cfg = self.settings.get("request", {})
@@ -177,10 +179,18 @@ class CrawlerEngine:
             try:
                 return self._fetch_sync(request)
             except Exception as e:
-                last_exception = e
-                logger.warning(f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}")
-                time.sleep(min(2 ** attempt, 10))
-        
+                if not is_retryable(e):
+                    logger.error(f"Non-retryable error for {request.url}: {e}")
+                    return None
+                if attempt >= self._max_retries:
+                    break
+                delay = self._retry_policy.delay(attempt, e)
+                logger.warning(
+                    f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}. "
+                    f"Retrying in {delay:.2f}s"
+                )
+                time.sleep(delay)
+
         logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
         return None
     
@@ -294,8 +304,17 @@ class CrawlerEngine:
             try:
                 return await self._fetch_async(request)
             except Exception as e:
-                logger.warning(f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}")
-                await asyncio.sleep(min(2 ** attempt, 10))
+                if not is_retryable(e):
+                    logger.error(f"Non-retryable error for {request.url}: {e}")
+                    return None
+                if attempt >= self._max_retries:
+                    break
+                delay = self._retry_policy.delay(attempt, e)
+                logger.warning(
+                    f"Request failed (attempt {attempt}/{self._max_retries}): {request.url} - {e}. "
+                    f"Retrying in {delay:.2f}s"
+                )
+                await asyncio.sleep(delay)
 
         logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
         return None

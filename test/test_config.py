@@ -76,6 +76,47 @@ class TestValidateConfig:
         }
         validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
 
+    def test_valid_retry_block_passes(self):
+        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
+
+        data = {
+            "app": {"name": "x", "version": "1"},
+            "engine": {
+                "mode": "sync",
+                "retry": {
+                    "base_delay": 0.5,
+                    "max_delay": 20,
+                    "multiplier": 3,
+                    "jitter": "equal",
+                    "respect_retry_after": False,
+                },
+            },
+            "logging": {"level": "INFO"},
+        }
+        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+
+    def test_invalid_retry_jitter_rejected(self):
+        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
+
+        data = {
+            "app": {"name": "x", "version": "1"},
+            "engine": {"mode": "sync", "retry": {"jitter": "wild"}},
+            "logging": {"level": "INFO"},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+
+    def test_retry_unknown_key_rejected(self):
+        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
+
+        data = {
+            "app": {"name": "x", "version": "1"},
+            "engine": {"mode": "sync", "retry": {"base_delay": 1, "typo": 2}},
+            "logging": {"level": "INFO"},
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+
     def test_unknown_key_rejected(self):
         data = {
             "app": {"name": "x", "version": "1"},

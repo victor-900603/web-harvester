@@ -14,7 +14,13 @@ engine:
   max_concurrency: 10
   request_timeout: 30
   download_delay: 1.0
-  max_retries: 3
+  max_retries: 3              # 失敗請求最大嘗試次數（僅可重試錯誤）
+  retry:                      # 指數回退設定
+    base_delay: 1.0           # 第一次重試前等待秒數
+    max_delay: 30.0           # 單次回退延遲上限（秒）
+    multiplier: 2.0           # 每次嘗試的成長倍率
+    jitter: "full"            # none | full | equal
+    respect_retry_after: true # 是否尊重 Retry-After（以 max_delay 封頂）
 
 request:
   user_agent: "web-harvester/1.0"
@@ -52,7 +58,20 @@ category_normalization: {}
 | `engine.max_concurrency` | 非同步模式最大並行數 | `10` |
 | `engine.request_timeout` | 請求逾時（秒） | `30` |
 | `engine.download_delay` | 同一網域請求間隔（秒） | `1.0` |
-| `engine.max_retries` | 失敗請求最大重試次數 | `3` |
+| `engine.max_retries` | 失敗請求最大嘗試次數（僅可重試錯誤；含首次嘗試） | `3` |
+| `engine.retry.base_delay` | 第一次重試前的延遲（秒） | `1.0` |
+| `engine.retry.max_delay` | 單次回退延遲上限（秒） | `30.0` |
+| `engine.retry.multiplier` | 每次嘗試的指數成長倍率 | `2.0` |
+| `engine.retry.jitter` | 抖動模式：`none` / `full` / `equal` | `full` |
+| `engine.retry.respect_retry_after` | 是否尊重回應的 `Retry-After` 標頭 | `true` |
+
+#### 重試與指數回退行為
+
+- 可重試錯誤：HTTP `408` / `429` / `5xx`、連線或逾時等傳輸錯誤，以及未知網路錯誤（例如 curl_cffi 自身錯誤）；其餘 4xx 直接失敗不重試。
+- 延遲計算：`min(base_delay * multiplier ** (已失敗次數 - 1), max_delay)`，再依 `jitter` 加入隨機抖動（`full` 為 `[0, delay]` 均勻分布，`equal` 為 `[delay/2, delay]`，`none` 不加）。
+- `respect_retry_after` 為 `true` 時，若錯誤回應帶有 `Retry-After`（支援秒數與 HTTP-date）則採用，但仍以 `max_delay` 封頂，避免伺服器回傳過大值造成長時間等待。
+- `max_retries` 為總嘗試次數；最後一次失敗後不再等待，直接放棄該請求。
+- 共用實作位於 `src/core/retry.py`（`BackoffPolicy` 等），sync / async 模式行為一致。
 
 ### request
 

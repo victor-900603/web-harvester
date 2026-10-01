@@ -33,19 +33,17 @@ class FakeCrawler(BaseCrawler):
         yield Item(data={"title": response.url}, source=self.name, url=response.url)
 
 
-def make_engine(mode="sync", concurrency=1, max_retries=1):
-    return CrawlerEngine(
-        {
-            "engine": {
-                "mode": mode,
-                "max_concurrency": concurrency,
-                "request_timeout": 30,
-                "download_delay": 0,
-                "max_retries": max_retries,
-            },
-            "request": {},
-        }
-    )
+def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None):
+    engine_cfg = {
+        "mode": mode,
+        "max_concurrency": concurrency,
+        "request_timeout": 30,
+        "download_delay": 0,
+        "max_retries": max_retries,
+    }
+    if retry is not None:
+        engine_cfg["retry"] = retry
+    return CrawlerEngine({"engine": engine_cfg, "request": {}})
 
 
 class TestSyncLimits:
@@ -97,16 +95,12 @@ class TestSyncLimits:
         with pytest.raises(ValueError):
             engine.run(FakeCrawler(["https://e.com/a"]))
 
-    def test_http_error_retries_then_returns_none(self, monkeypatch):
+    def test_retryable_error_retries_then_returns_none(self, monkeypatch):
         calls = []
 
         def failing_fetch(self, request):
             calls.append(request.url)
-            raise httpx.HTTPStatusError(
-                "404 Client Error",
-                request=httpx.Request(request.method, request.url),
-                response=httpx.Response(404, request=httpx.Request(request.method, request.url)),
-            )
+            raise _status_error(request, 503)
 
         monkeypatch.setattr(CrawlerEngine, "_fetch_sync", failing_fetch)
         monkeypatch.setattr(time, "sleep", lambda _: None)
@@ -115,6 +109,45 @@ class TestSyncLimits:
         items = engine.run(crawler)
         assert items == []
         assert len(calls) == 3
+
+    def test_non_retryable_error_fails_fast(self, monkeypatch):
+        calls = []
+
+        def failing_fetch(self, request):
+            calls.append(request.url)
+            raise _status_error(request, 404)
+
+        sleeps = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_sync", failing_fetch)
+        monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+        engine = make_engine("sync", max_retries=3)
+        crawler = FakeCrawler(["https://e.com/bad"])
+        items = engine.run(crawler)
+        assert items == []
+        assert len(calls) == 1
+        assert sleeps == []
+
+    def test_retry_after_header_is_honored(self, monkeypatch):
+        def failing_fetch(self, request):
+            raise _status_error(request, 429, {"Retry-After": "7"})
+
+        sleeps = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_sync", failing_fetch)
+        monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+        engine = make_engine("sync", max_retries=2, retry={"jitter": "none", "max_delay": 100})
+        engine.run(FakeCrawler(["https://e.com/limited"]))
+        assert sleeps == [7.0]
+
+    def test_backoff_delay_used_between_retries(self, monkeypatch):
+        def failing_fetch(self, request):
+            raise _status_error(request, 500)
+
+        sleeps = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_sync", failing_fetch)
+        monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+        engine = make_engine("sync", max_retries=3, retry={"base_delay": 2, "jitter": "none"})
+        engine.run(FakeCrawler(["https://e.com/flaky"]))
+        assert sleeps == [2.0, 4.0]
 
     def test_fetch_sync_sets_body_for_json(self, monkeypatch):
         # Engine now delegates to http_client; test via httpx path explicitly
@@ -238,6 +271,61 @@ class TestAsyncLimits:
         items = engine.run(crawler)
         assert 0 < len(items) < 5
 
+    def test_retryable_error_retries_then_returns_none(self, monkeypatch):
+        calls = []
+
+        async def failing_fetch(self, request):
+            calls.append(request.url)
+            raise _status_error(request, 503)
+
+        sleeps = []
+
+        async def fake_sleep(s):
+            sleeps.append(s)
+
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", failing_fetch)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        engine = make_engine("async", max_retries=3, retry={"jitter": "none"})
+        items = engine.run(FakeCrawler(["https://e.com/bad"]))
+        assert items == []
+        assert len(calls) == 3
+        assert len(sleeps) == 2
+
+    def test_non_retryable_error_fails_fast(self, monkeypatch):
+        calls = []
+
+        async def failing_fetch(self, request):
+            calls.append(request.url)
+            raise _status_error(request, 404)
+
+        sleeps = []
+
+        async def fake_sleep(s):
+            sleeps.append(s)
+
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", failing_fetch)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        engine = make_engine("async", max_retries=3)
+        items = engine.run(FakeCrawler(["https://e.com/bad"]))
+        assert items == []
+        assert len(calls) == 1
+        assert sleeps == []
+
+    def test_retry_after_header_is_honored(self, monkeypatch):
+        async def failing_fetch(self, request):
+            raise _status_error(request, 429, {"Retry-After": "9"})
+
+        sleeps = []
+
+        async def fake_sleep(s):
+            sleeps.append(s)
+
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", failing_fetch)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        engine = make_engine("async", max_retries=2, retry={"jitter": "none", "max_delay": 100})
+        engine.run(FakeCrawler(["https://e.com/limited"]))
+        assert sleeps == [9.0]
+
 
 class TestBuildEngine:
     def test_disabled_storage(self, tmp_path):
@@ -263,6 +351,14 @@ def _response(request):
     from src.core import Response
 
     return Response(url=request.url, status_code=200, text="<html></html>", request=request)
+
+
+def _status_error(request, status_code, headers=None):
+    return httpx.HTTPStatusError(
+        f"{status_code} Error",
+        request=httpx.Request(request.method, request.url),
+        response=httpx.Response(status_code, headers=headers or {}, request=httpx.Request(request.method, request.url)),
+    )
 
 
 def _fake_sync_process(self, request):
