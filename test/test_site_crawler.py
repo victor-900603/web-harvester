@@ -413,6 +413,29 @@ class TestParseArticle:
         value = crawler._extract_field("not-a-date", {"as": "datetime", "datetime_format": "%Y"})
         assert value == "not-a-date"
 
+    def test_extract_field_none_returns_none(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        assert crawler._extract_field(None, {"as": "text", "selector": "div.author"}) is None
+
+    def test_html_field_selector_no_match_skipped(self, sample_site_config):
+        sample_site_config["article_page"] = {
+            "type": "html",
+            "fields": {
+                "title": "h1.article-title",
+                "author": {"as": "text", "selector": "div.author", "attr": "text"},
+            },
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news/1",
+            "<h1 class='article-title'>Title</h1>",
+        )
+        item = next(crawler.parse_article(resp))
+        assert item.data == {
+            "url": "https://example.com/news/1",
+            "title": "Title",
+        }
+
     def test_html_field_missing_selector_skipped(self, sample_site_config):
         sample_site_config["article_page"] = {
             "type": "html",

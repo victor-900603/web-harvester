@@ -480,6 +480,8 @@ class SiteCrawler(BaseCrawler):
         
     def _extract_field(self, value: str, field_cfg: Union[str, Dict[str, Any]]) -> Any:
         """Extract a field value based on the configuration."""
+        if value is None:
+            return None
         try:
             if isinstance(field_cfg, dict):
                 field_as = field_cfg.get("as")
