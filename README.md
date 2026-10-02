@@ -26,8 +26,17 @@ web-harvester/
 │   │   ├── settings.schema.json
 │   │   └── site.schema.json
 │   └── sites/
-│       ├── example.yaml    # 範例網站設定
-│       └── udn_news.yaml   # 聯合新聞網設定
+│       ├── example.yaml    # 範例網站設定（最小可用範本）
+│       ├── full_example.yaml  # 完整欄位範本
+│       ├── ltn.yaml        # 自由時報
+│       ├── cna.yaml        # 中央社
+│       ├── pts.yaml        # 公視新聞
+│       ├── ettoday.yaml    # ETtoday新聞雲
+│       ├── setn.yaml       # 三立新聞網
+│       ├── tvbs.yaml       # TVBS新聞網
+│       ├── nownews.yaml    # NOWnews今日新聞
+│       ├── chinatimes.yaml # 中時新聞網
+│       └── udn_news.yaml   # 聯合新聞網
 ├── docs/
 │   ├── site-config.md      # 網站設定完整說明
 │   ├── global-config.md    # 全域設定完整說明
@@ -131,7 +140,7 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 最小範例請見 `config/sites/example.yaml`。完整欄位、範例與選項說明請見 [docs/site-config.md](docs/site-config.md)，包含：
 
 - 頂層欄位速查與最小/完整 YAML 範例
-- `limits` / `request` / `list_page`（繼承模型、sources、extract、pagination、categories）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
+- `limits` / `request` / `list_page`（self-contained `sources`、`extract`、`pagination`、`categories`、POST `body` / `json_body`）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
 - 分類與標籤（`category` / `tags` / `category_normalization`，4 種來源 `source: html|url|json|keyword` 與 `json.from` 對照）
 - 搜尋與篩選（`{page}` / `{keyword}` / `{category}` 佔位符與來源選擇決策表）
 - 驗證與除錯（常見 `ConfigValidationError` 對照）
