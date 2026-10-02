@@ -300,6 +300,10 @@
         "url_template": {
           "type": "string",
           "description": "URL template with a {url} placeholder used to build the final URL."
+        },
+        "url_filter": {
+          "type": "string",
+          "description": "Optional regex; items whose final URL does not match are skipped."
         }
       },
       "required": ["items_path", "url_field"]

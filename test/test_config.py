@@ -385,6 +385,47 @@ class TestListPageSourcesSchema:
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
+    def test_url_filter_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {
+                            "items_path": "data",
+                            "url_field": "url",
+                            "url_filter": "^https://example\\.com/",
+                        },
+                    },
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_url_filter_wrong_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {
+                            "items_path": "data",
+                            "url_field": "url",
+                            "url_filter": 123,
+                        },
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
     def test_source_missing_type_rejected(self):
         data = {
             "name": "x",
