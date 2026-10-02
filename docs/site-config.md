@@ -235,11 +235,12 @@ request:
 
 | 欄位 | 類型 | 必填 | 預設（程式） | 說明 |
 |------|------|------|--------------|------|
-| `items_path` | `string` | 是 | `""`（根） | 指向陣列的 JSON path（dot 分隔，空字串表示根即陣列；`site_crawler.py:309-313`） |
+| `items_path` | `string` | 是 | `""`（根） | 指向陣列的 JSON path（dot 分隔，空字串表示根即陣列；若指向物件則取其 values；`site_crawler.py:309-313`） |
 | `url_field` | `string` | 是 | `"url"` | 每筆 item 內文章 URL 的欄位名（僅取當層 key，非 path） |
 | `url_template` | `string` | 否 | `"{url}"` | 用 `{url}` 佔位符組合最終 URL（`site_crawler.py:324` `format(url=raw_url)`）；空字串時改走 `urljoin(base_url, raw_url)` |
+| `url_filter` | `string` | 否 | - | 選用正則；最終 URL 不符者跳過（`re.search`，如僅保留主網域文章） |
 
-行為細節：`parser.extract_path(items_path)` → 非陣列則包為單項陣列 → 每項取 `item[url_field]` → `url_template.format(url=raw_url)` → 注入 `meta.list_data` 供分類 `json/from: list_data` 使用（`site_crawler.py:328-335`）。
+行為細節：`parser.extract_path(items_path)` → 非陣列則包為單項陣列（物件取其 values）→ 每項取 `item[url_field]` → `url_template.format(url=raw_url)` → 若 `url_filter` 且 URL 不符則跳過 → 注入 `meta.list_data` 供分類 `json/from: list_data` 使用（`site_crawler.py:328-335`）。
 
 ### 5.4 pagination
 
@@ -652,6 +653,7 @@ list_page:
         items_path: "result.articles"    # JSON 必填
         url_field: "slug"                # 必填
         url_template: "https://example.com/article/{url}"  # 選填，{url} 佔位符；空字串走 urljoin
+        # url_filter: "^https://example\\.com/"  # 選填，最終 URL 不符則跳過
       pagination:
         enabled: true
         start: 1

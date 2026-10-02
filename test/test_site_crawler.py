@@ -376,6 +376,58 @@ class TestParseList:
         assert len(results) == 1
         assert results[0].url == "https://example.com/news/1"
 
+    def test_json_list_object_values_are_iterated(self, sample_site_config):
+        sample_site_config["list_page"] = {
+            "sources": [
+                {
+                    "url": "https://example.com/api",
+                    "type": "json",
+                    "extract": {
+                        "items_path": "data",
+                        "url_field": "url",
+                        "url_template": "{url}",
+                    },
+                },
+            ],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/api",
+            '{"data": {"60": {"url": "https://example.com/a"}, '
+            '"61": {"url": "https://example.com/b"}}}',
+        )
+        results = list(crawler.parse_list(resp))
+        assert len(results) == 2
+        assert [r.url for r in results] == [
+            "https://example.com/a",
+            "https://example.com/b",
+        ]
+
+    def test_json_list_url_filter_skips_non_matching(self, sample_site_config):
+        sample_site_config["list_page"] = {
+            "sources": [
+                {
+                    "url": "https://example.com/api",
+                    "type": "json",
+                    "extract": {
+                        "items_path": "data",
+                        "url_field": "url",
+                        "url_template": "{url}",
+                        "url_filter": "^https://news\\.ltn\\.com\\.tw/",
+                    },
+                },
+            ],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/api",
+            '{"data": [{"url": "https://news.ltn.com.tw/news/1"}, '
+            '{"url": "https://ent.ltn.com.tw/news/2"}]}',
+        )
+        results = list(crawler.parse_list(resp))
+        assert len(results) == 1
+        assert results[0].url == "https://news.ltn.com.tw/news/1"
+
 
 class TestParseArticle:
     def test_non_ok_article_yields_nothing(self, sample_site_config):

@@ -369,9 +369,12 @@ class SiteCrawler(BaseCrawler):
         items_path = extract.get("items_path", "")
         url_field = extract.get("url_field", "url")
         url_template = extract.get("url_template", "{url}")
+        url_filter = extract.get("url_filter")
 
         items = parser.extract_path(items_path) if items_path else parser.data
-        if not isinstance(items, list):
+        if isinstance(items, dict):
+            items = list(items.values())
+        elif not isinstance(items, list):
             items = [items]
 
         for item_data in items:
@@ -384,6 +387,9 @@ class SiteCrawler(BaseCrawler):
                 url = url_template.format(url=raw_url)
             else:
                 url = urljoin(self.base_url, raw_url) if raw_url else None
+
+            if url_filter and url and not re.search(url_filter, url):
+                continue
 
             if self._article_cfg:
                 yield Request(
