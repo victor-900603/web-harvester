@@ -52,6 +52,10 @@ class TestJSONParser:
         parser = JSONParser('{"name": "Alice", "age": 30}')
         assert parser.data == {"name": "Alice", "age": 30}
 
+    def test_init_with_utf8_bom(self):
+        parser = JSONParser('\ufeff{"name": "Alice"}')
+        assert parser.data == {"name": "Alice"}
+
     def test_init_with_object(self):
         data = {"items": [{"title": "A"}]}
         parser = JSONParser(data)
