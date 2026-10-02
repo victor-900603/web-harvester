@@ -457,6 +457,23 @@ class TestListPageSourcesSchema:
         with pytest.raises(ConfigValidationError):
             validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
+    def test_pagination_start_zero_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "html",
+                        "extract": {"item_selector": "div.piece"},
+                        "pagination": {"enabled": True, "start": 0},
+                    },
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
     def test_missing_sources_rejected(self):
         data = {
             "name": "x",
