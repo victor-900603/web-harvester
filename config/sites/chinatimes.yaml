@@ -11,24 +11,6 @@ request:
     Referer: "https://www.chinatimes.com"
 
 list_page:
-  type: "html"
-
-  extract:
-    item_selector: "ul.vertical-list li"
-    link_selector: ".title a"
-    link_attr: "href"
-
-  pagination:
-    enabled: true
-    start: 1
-
-  sources:
-    - url: "https://www.chinatimes.com/realtimenews?page={page}&chdtv"
-
-    - url: "https://www.chinatimes.com/{category}/total?page={page}&chdtv"
-
-    - url: "https://www.chinatimes.com/search/{keyword}?page={page}&chdtv"
-
   categories:
     "政治": "politic"
     "國際": "world"
@@ -44,6 +26,37 @@ list_page:
     "科技": "technologynews"
     "有影": "tube"
     "寶島": "taiwan"
+
+  sources:
+    - url: "https://www.chinatimes.com/realtimenews?page={page}&chdtv"
+      type: "html"
+      extract:
+        item_selector: "ul.vertical-list li"
+        link_selector: ".title a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+    - url: "https://www.chinatimes.com/{category}/total?page={page}&chdtv"
+      type: "html"
+      extract:
+        item_selector: "ul.vertical-list li"
+        link_selector: ".title a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+    - url: "https://www.chinatimes.com/search/{keyword}?page={page}&chdtv"
+      type: "html"
+      extract:
+        item_selector: "ul.vertical-list li"
+        link_selector: ".title a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
 
 # 文章頁設定
 article_page:

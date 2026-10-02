@@ -10,16 +10,6 @@ request:
     Referer: "https://udn.com"
 
 list_page:
-  type: "json"
-
-  extract:
-    items_path: "lists"
-    url_field: "titleLink"
-
-  pagination:
-    enabled: true
-    start: 1
-
   # 分類名稱對應站內 cate_id（即時新聞頻道）
   categories:
     "要聞": "1"
@@ -40,12 +30,24 @@ list_page:
 
   sources:
     - url: "https://udn.com/api/more?page={page}&id=&channelId=1&cate_id={category}&type=breaknews&totalRecNo=100"
+      type: "json"
       extract:
+        items_path: "lists"
+        url_field: "titleLink"
         url_template: "https://udn.com{url}"
+      pagination:
+        enabled: true
+        start: 1
 
     - url: "https://udn.com/api/more?page={page}&id=search:{keyword}&channelId=2&type=searchword"
+      type: "json"
       extract:
+        items_path: "lists"
+        url_field: "titleLink"
         url_template: "{url}"
+      pagination:
+        enabled: true
+        start: 1
 
 article_page:
   type: "html"

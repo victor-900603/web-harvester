@@ -21,24 +21,23 @@ request:
   headers:
     Referer: "https://example.com"
 
-# 列表頁設定
+# 列表頁設定（每個來源自帶 type/extract/pagination，無繼承）
 list_page:
-  type: "html"
-
-  # 擷取文章連結的抽取設定
-  extract:
-    item_selector: "article.news-item"
-    link_selector: "a"
-    link_attr: "href"
-
-  # 分頁設定（頁數上限由 limits.max_pages 控制）
-  pagination:
-    enabled: true
-    start: 1
-
   # 列表來源（至少一個，URL 可含 {page}/{keyword}/{category} 佔位符）
   sources:
     - url: "https://example.com/news?page={page}"
+      type: "html"
+
+      # 擷取文章連結的抽取設定
+      extract:
+        item_selector: "article.news-item"
+        link_selector: "a"
+        link_attr: "href"
+
+      # 分頁設定（頁數上限由 limits.max_pages 控制）
+      pagination:
+        enabled: true
+        start: 1
 
 # 文章頁設定
 article_page:
