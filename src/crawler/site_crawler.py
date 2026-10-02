@@ -304,9 +304,15 @@ class SiteCrawler(BaseCrawler):
         cookies = self._request_cfg.get("cookies", {})
         
         if list_type == "json":
-            yield from self._parse_json_list(response, extract, headers, cookies)
+            results = self._parse_json_list(response, extract, headers, cookies)
         else:
-            yield from self._parse_html_list(response, extract, headers, cookies)
+            results = self._parse_html_list(response, extract, headers, cookies)
+
+        count = 0
+        for result in results:
+            count += 1
+            yield result
+        logger.info(f"List page parsed: {response.url} -> {count} link(s)")
             
     def _parse_html_list(
         self, 
