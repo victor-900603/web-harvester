@@ -76,6 +76,50 @@ class TestSyncLimits:
         items = engine.run(crawler)
         assert len(items) == 3
 
+    def test_post_same_url_different_body_not_deduplicated(self, monkeypatch):
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _fake_sync_process)
+
+        class PostCrawler(FakeCrawler):
+            def __init__(self):
+                super().__init__([])
+
+            def start_requests(self):
+                for page in range(3):
+                    yield Request(
+                        url="https://e.com/list",
+                        method="POST",
+                        json_body={"pageidx": page},
+                        callback="parse",
+                    )
+
+            def parse(self, response):
+                yield Item(data={"title": response.url}, source=self.name, url=response.url)
+
+        items = make_engine("sync").run(PostCrawler())
+        assert len(items) == 3
+
+    def test_post_same_url_same_body_deduplicated(self, monkeypatch):
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _fake_sync_process)
+
+        class PostCrawler(FakeCrawler):
+            def __init__(self):
+                super().__init__([])
+
+            def start_requests(self):
+                for _ in range(2):
+                    yield Request(
+                        url="https://e.com/list",
+                        method="POST",
+                        body="offset=0",
+                        callback="parse",
+                    )
+
+            def parse(self, response):
+                yield Item(data={"title": response.url}, source=self.name, url=response.url)
+
+        items = make_engine("sync").run(PostCrawler())
+        assert len(items) == 1
+
     def test_timeout_stops_early(self, monkeypatch):
         def slow_process(self, request):
             time.sleep(0.05)
@@ -258,6 +302,28 @@ class TestAsyncLimits:
             emit={"https://e.com/a": ["https://e.com/b", "https://e.com/c"]},
         )
         items = engine.run(crawler)
+        assert len(items) == 3
+
+    def test_post_same_url_different_body_not_deduplicated(self, monkeypatch):
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", _fake_async_fetch)
+
+        class PostCrawler(FakeCrawler):
+            def __init__(self):
+                super().__init__([])
+
+            def start_requests(self):
+                for page in range(3):
+                    yield Request(
+                        url="https://e.com/list",
+                        method="POST",
+                        json_body={"pageidx": page},
+                        callback="parse",
+                    )
+
+            def parse(self, response):
+                yield Item(data={"title": response.url}, source=self.name, url=response.url)
+
+        items = make_engine("async").run(PostCrawler())
         assert len(items) == 3
 
     def test_timeout_stops_early(self, monkeypatch):

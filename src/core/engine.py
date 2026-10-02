@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections import deque
@@ -21,6 +22,18 @@ if TYPE_CHECKING:
     from ..crawler import BaseCrawler
 
 logger = logging.getLogger(__name__)
+
+
+def _request_key(request: Request) -> tuple:
+    """Return a deduplication key that also covers the request body.
+
+    Two list-page requests may share the same URL while differing only in their
+    POST body (e.g. offset/cursor pagination). Keying deduplication on the URL
+    alone would wrongly drop every page after the first.
+    """
+    json_body = request.json_body
+    json_key = json.dumps(json_body, sort_keys=True) if json_body is not None else None
+    return (request.method or "GET", request.url, request.body, json_key)
 
 
 class CrawlerEngine:
@@ -129,13 +142,14 @@ class CrawlerEngine:
 
             request = queue.popleft()
 
-            if request.url in seen:
+            key = _request_key(request)
+            if key in seen:
                 if stop_on_duplicate:
-                    logger.info(f"Duplicate URL detected: {request.url}. Stopping.")
+                    logger.info(f"Duplicate request detected: {request.method or 'GET'} {request.url}. Stopping.")
                     break
                 continue
 
-            seen.add(request.url)
+            seen.add(key)
             
             response = self._process_sync(request)
             if response is None:
@@ -246,13 +260,14 @@ class CrawlerEngine:
                     if stop_event.is_set():
                         continue
 
-                    if request.url in seen:
+                    key = _request_key(request)
+                    if key in seen:
                         if stop_on_duplicate:
-                            logger.info(f"Duplicate URL detected: {request.url}. Stopping.")
+                            logger.info(f"Duplicate request detected: {request.method or 'GET'} {request.url}. Stopping.")
                             stop_event.set()
                         continue
 
-                    seen.add(request.url)
+                    seen.add(key)
                     response = await self._process_async(request)
 
                     if response is None:
