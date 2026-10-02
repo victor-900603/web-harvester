@@ -1,0 +1,72 @@
+# ============================================================
+# NOWnews 今日新聞
+# ============================================================
+# 分類列表頁 /cat/{category}/page/{page}/ 為伺服器端渲染，每頁約 16 筆。
+# 全站搜尋為前端渲染，原始 HTML 不含結果，故無 {keyword} 來源。
+
+name: "NOWnews今日新聞"
+base_url: "https://www.nownews.com"
+
+request:
+  headers:
+    Referer: "https://www.nownews.com"
+
+list_page:
+  categories:
+    "即時": "breaking"
+    "要聞": "news-summary"
+    "政治": "news-summary/politics"
+    "生活": "news-summary/life-focus"
+    "國際": "news-global"
+    "財經": "finance"
+    "運動": "sport"
+    "娛樂": "entertainment"
+    "遊戲": "webgame"
+
+  category_default: "news-summary"
+
+  sources:
+    - url: "https://www.nownews.com/cat/{category}/page/{page}/"
+      type: "html"
+      extract:
+        item_selector: "ul.list-wrap li.item"
+        link_selector: 'a[href*="/news/"]'
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1.article-title"
+
+    content:
+      as: "text"
+      selector: "#articleContent"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: 'meta[property="article:published_time"]'
+      attr: "content"
+
+    author:
+      as: "text"
+      selector: "div.info p a"
+      attr: "text"
+
+category:
+  sources:
+    - source: "html"
+      selector: 'meta[name="section"]'
+      attr: "content"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
+      split: ","

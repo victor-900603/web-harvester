@@ -1,0 +1,91 @@
+# ============================================================
+# TVBS 新聞網
+# ============================================================
+# 列表為官方 JSON API（api.news.tvbs.app），每頁 16 筆。
+# 分頁為 cursor-based：由 meta.pagination.next_cursor 帶入 URL 的 {cursor}。
+# 分類頁為 Astro SSR、/realtime 為前端渲染，故列表改用 API。
+
+name: "TVBS新聞網"
+base_url: "https://news.tvbs.com.tw"
+
+request:
+  headers:
+    Referer: "https://news.tvbs.com.tw"
+
+list_page:
+  categories:
+    "政治": "politics"
+    "國際": "world"
+    "生活": "life"
+    "娛樂": "entertainment"
+    "運動": "sports"
+    "財經": "money"
+    "地方": "local"
+    "健康": "health"
+    "兩岸": "china"
+    "汽車": "cars"
+    "科技": "tech"
+    "旅遊": "travel"
+
+  category_default: "politics"
+
+  sources:
+    - url: "https://api.news.tvbs.app/v1/articles/realtime?cursor={cursor}"
+      type: "json"
+      extract:
+        items_path: "data"
+        url_field: "article_url"
+        url_template: "{url}"
+      pagination:
+        enabled: true
+        type: "cursor"
+        start: 1
+        next_cursor_path: "meta.pagination.next_cursor"
+
+    - url: "https://api.news.tvbs.app/v1/articles/realtime?category_slug={category}&cursor={cursor}"
+      type: "json"
+      extract:
+        items_path: "data"
+        url_field: "article_url"
+        url_template: "{url}"
+      pagination:
+        enabled: true
+        type: "cursor"
+        start: 1
+        next_cursor_path: "meta.pagination.next_cursor"
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1"
+
+    content:
+      as: "text"
+      selector: '[data-section="article-content-editor"] > div:first-child'
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: 'meta[property="article:published_time"]'
+      attr: "content"
+
+    author:
+      as: "text"
+      selector: '[data-section="article-contributors"] span'
+      attr: "text"
+      regex: "記者[：:]\\s*(.+)"
+
+category:
+  sources:
+    - source: "html"
+      selector: 'meta[property="article:section"]'
+      attr: "content"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[property="article:tag"]'
+      attr: "content"
+      multiple: true

@@ -1,0 +1,74 @@
+# ============================================================
+# ETtoday 新聞雲
+# ============================================================
+# 列表為站方捲動 API（POST show_roll.php）：offset 為 0 基頁碼，tFile 為分類檔 id（含 .json），
+# 回應為 HTML 片段（每頁 10 筆，div.piece）。
+# 回應會混入子網域文章（其文章頁模板不同），故以 link_selector 僅保留 www。
+
+name: "ETtoday新聞雲"
+base_url: "https://www.ettoday.net"
+
+request:
+  headers:
+    Content-Type: "application/x-www-form-urlencoded; charset=UTF-8"
+    Referer: "https://www.ettoday.net/news/focus/"
+
+list_page:
+  categories:
+    "焦點新聞": "462_mix.json"
+    "政治": "1.json"
+    "社會": "6.json"
+    "生活": "5.json"
+    "國際": "2.json"
+    "民生消費": "12.json"
+    "3C家電": "201.json"
+
+  category_default: "462_mix.json"
+
+  sources:
+    - url: "https://www.ettoday.net/show_roll.php"
+      method: "POST"
+      type: "html"
+      body: "offset={page}&tPage=2&tFile={category}&tOt=0&tSi=24&tAr=0"
+      extract:
+        item_selector: "div.piece"
+        link_selector: 'a[href*="www.ettoday.net/news/20"]'
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 0
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1.title"
+
+    content:
+      as: "text"
+      selector: "div.story"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: 'meta[name="pubdate"]'
+      attr: "content"
+
+    author:
+      as: "text"
+      selector: 'meta[name="author"]'
+      attr: "content"
+
+category:
+  sources:
+    - source: "html"
+      selector: 'meta[name="section"]'
+      attr: "content"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
+      split: ","

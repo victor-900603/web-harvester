@@ -1,0 +1,68 @@
+# ============================================================
+# 公視新聞
+# ============================================================
+# 列表為 cards 端點 /category/{id}/cards?page={n}，伺服器端渲染 HTML 片段，每頁 6 張卡片。
+# 全文搜尋為前端渲染，原始 HTML 不含結果，故無 {keyword} 來源。
+
+name: "公視新聞"
+base_url: "https://news.pts.org.tw"
+
+request:
+  headers:
+    Referer: "https://news.pts.org.tw"
+
+list_page:
+  categories:
+    "政治": "1"
+    "環境": "3"
+    "國際": "4"
+    "生活": "5"
+    "社會": "7"
+    "社福人權": "12"
+
+  category_default: "1"
+
+  sources:
+    - url: "https://news.pts.org.tw/category/{category}/cards?page={page}"
+      type: "html"
+      extract:
+        item_selector: "div[class*='max-md:flex-wrap']"
+        link_selector: "a[href*='/article/']"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1.article-title"
+
+    content:
+      as: "text"
+      selector: "div.post-article"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: "meta[property='article:published_time']"
+      attr: "content"
+
+    author:
+      selector: "meta[name='author']"
+      attr: "content"
+
+category:
+  sources:
+    - source: "html"
+      selector: "meta[property='article:section']"
+      attr: "content"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: "ul.tag-list li.hashList a"
+      attr: "text"
+      multiple: true

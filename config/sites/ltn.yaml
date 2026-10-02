@@ -1,0 +1,74 @@
+# ============================================================
+# 自由時報
+# ============================================================
+# 列表為 AJAX JSON：data 是 {id: {...}} 物件，文章網址在 url 欄位。
+
+name: "自由時報"
+base_url: "https://news.ltn.com.tw"
+
+request:
+  headers:
+    Referer: "https://news.ltn.com.tw"
+
+list_page:
+  categories:
+    "即時": "all"
+    "熱門": "popular"
+    "政治": "politics"
+    "社會": "society"
+    "生活": "life"
+    "國際": "world"
+    "地方": "local"
+    "蒐奇": "novelty"
+
+  # 未指定 --category 時的預設分類（all = 總覽）
+  category_default: "all"
+
+  sources:
+    - url: "https://news.ltn.com.tw/ajax/breakingnews/{category}/{page}"
+      type: "json"
+      extract:
+        items_path: "data"
+        url_field: "url"
+        url_template: "{url}"
+        # AJAX 回應混雜各子網域（ent/ec/estate），僅取 news.ltn.com.tw 文章
+        url_filter: "^https://news\\.ltn\\.com\\.tw/"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "div.whitecon.article h1"
+
+    content:
+      as: "text"
+      selector: "div.text.boxTitle.boxText"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: "meta[name='pubdate']"
+      attr: "content"
+
+    author:
+      as: "text"
+      selector: "span.article_edit"
+      attr: "text"
+      regex: "記者(.*?)／"
+
+category:
+  sources:
+    - source: "json"
+      from: "json_ld"
+      path: "articleSection"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
+      split: ","
