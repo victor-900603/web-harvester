@@ -16,7 +16,7 @@ class JSONParser:
     """
     def __init__(self, content: str | Dict[str, Any] | List[Any]) -> None:
         if isinstance(content, str):
-            self.data = json.loads(content)
+            self.data = json.loads(content.lstrip("\ufeff"))
         else:
             self.data = content
             
