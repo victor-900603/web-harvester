@@ -250,12 +250,33 @@
         "enabled": {
           "type": "boolean"
         },
+        "type": {
+          "type": "string",
+          "enum": ["page", "cursor"],
+          "description": "Pagination style (default: page). 'page' iterates {page} from start; 'cursor' follows the next-page cursor extracted from the response into {cursor}."
+        },
         "start": {
           "type": "integer",
           "minimum": 0
+        },
+        "next_cursor_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSON path (within the list response) to the next-page cursor. Required when type is 'cursor'."
         }
       },
-      "required": ["enabled"]
+      "required": ["enabled"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "cursor" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["next_cursor_path"]
+          }
+        }
+      ]
     },
     "list_extract": {
       "description": "List extract config. Use the HTML form for HTML list sources and the JSON form for JSON list sources.",
