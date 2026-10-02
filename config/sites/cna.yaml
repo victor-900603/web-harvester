@@ -1,0 +1,109 @@
+# ============================================================
+# 中央社
+# ============================================================
+# 列表為站方 JSON API（POST WNewsList），以 body 的 pageidx 分頁。
+# 全文檢索頁 /search/hysearchws.aspx?q= 為伺服器端渲染 HTML，僅取單頁。
+
+name: "中央社"
+base_url: "https://www.cna.com.tw"
+
+request:
+  headers:
+    accept: "application/json, text/javascript, */*; q=0.01"
+    content-type: "application/json"
+    origin: "https://www.cna.com.tw"
+    referer: "https://www.cna.com.tw/list/aall.aspx"
+    x-requested-with: "XMLHttpRequest"
+
+list_page:
+  categories:
+    "即時": "aall"
+    "政治": "aipl"
+    "國際": "aopl"
+    "兩岸": "acn"
+    "產經": "aie"
+    "證券": "asc"
+    "科技": "ait"
+    "生活": "ahel"
+    "社會": "asoc"
+    "地方": "aloc"
+    "文化": "acul"
+    "運動": "aspt"
+    "娛樂": "amov"
+
+  category_default: "aall"
+
+  sources:
+    - url: "https://www.cna.com.tw/cna2018api/api/WNewsList"
+      method: "POST"
+      type: "json"
+      extract:
+        items_path: "ResultData.Items"
+        url_field: "PageUrl"
+        url_template: "{url}"
+      pagination:
+        enabled: true
+        start: 1
+      json_body:
+        action: "0"
+        category: "{category}"
+        pagesize: "20"
+        pageidx: "{page}"
+
+    - url: "https://www.cna.com.tw/search/hysearchws.aspx?q={keyword}"
+      method: "GET"
+      type: "html"
+      extract:
+        item_selector: "ul.mainList#jsMainList > li"
+        link_selector: 'a[href^="/news/"]'
+        link_attr: "href"
+      pagination:
+        enabled: false
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "div.centralContent h1"
+
+    content:
+      as: "text"
+      selector: "div.centralContent div.paragraph"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: 'meta[property="article:published_time"]'
+      attr: "content"
+
+    author:
+      as: "text"
+      selector: "div.centralContent a.author"
+      attr: "text"
+
+category:
+  sources:
+    - source: "url"
+      regex: "/news/([a-z]+)/"
+      mapping:
+        "aall": "即時"
+        "aipl": "政治"
+        "aopl": "國際"
+        "acn": "兩岸"
+        "aie": "產經"
+        "asc": "證券"
+        "ait": "科技"
+        "ahel": "生活"
+        "asoc": "社會"
+        "aloc": "地方"
+        "acul": "文化"
+        "aspt": "運動"
+        "amov": "娛樂"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[property="article:tag"]'
+      attr: "content"
+      multiple: true

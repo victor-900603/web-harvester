@@ -1,0 +1,77 @@
+# ============================================================
+# 三立新聞網
+# ============================================================
+# 列表為 AJAX 端點 /news/getlastestnews/{category}/{page}，伺服器端渲染 HTML 片段（每頁約 30 筆）。
+# {category} 為站方數值分類 id（取自 /viewall/{slug} 的 #hfPageGroupId）。
+# 列表混有子網域文章，以 link_selector 僅保留 www。
+
+name: "三立新聞網"
+base_url: "https://www.setn.com"
+
+request:
+  headers:
+    Referer: "https://www.setn.com"
+
+list_page:
+  categories:
+    "全部": "1"
+    "政治": "6"
+    "社會": "41"
+    "生活": "4"
+    "國際": "5"
+    "旅遊": "50"
+    "運動": "34"
+    "兩岸": "68"
+    "財經": "2"
+    "科技": "7"
+    "汽車": "12"
+    "寵物": "47"
+
+  category_default: "1"
+
+  sources:
+    - url: "https://www.setn.com/news/getlastestnews/{category}/{page}"
+      type: "html"
+      extract:
+        item_selector: "div.news_list_item"
+        link_selector: 'a[href*="www.setn.com/news/"], a[href^="/news/"]'
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+
+  fields:
+    title: "h1.article_title_wrap"
+
+    content:
+      as: "text"
+      selector: "div.article_content_area"
+      attr: "text"
+
+    published_at:
+      as: "datetime"
+      selector: "div.time_item"
+      attr: "text"
+      datetime_format: "%Y/%m/%d %H:%M:%S"
+
+    author:
+      as: "text"
+      selector: "div.author_wrap"
+      attr: "text"
+
+category:
+  sources:
+    - source: "json"
+      from: "json_ld"
+      path: "articleSection"
+  default: "其他"
+
+tags:
+  sources:
+    - source: "html"
+      selector: 'meta[name="news_keywords"]'
+      attr: "content"
+      split: ","
