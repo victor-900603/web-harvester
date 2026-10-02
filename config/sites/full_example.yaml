@@ -21,27 +21,31 @@ request:
     session: "xxx"
 
 list_page:
-  method: "GET"
-  type: "html"
   categories:
     "股市": "7251"
     "政治": "6645"
   category_default: "0"
-  extract:
-    item_selector: "article.news-item"
-    link_selector: "a"
-    link_attr: "href"
-  pagination:
-    enabled: true
-    start: 1
   sources:
     - url: "https://example.com/news?page={page}&cat={category}"
+      type: "html"
+      extract:
+        item_selector: "article.news-item"
+        link_selector: "a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
     - url: "https://example.com/search?q={keyword}&page={page}"
       type: "html"
       extract:
         item_selector: "div.search-item"
         link_selector: "a.title"
         link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
     - url: "https://example.com/api/list?page={page}"
       type: "json"
       method: "GET"
@@ -52,6 +56,19 @@ list_page:
       pagination:
         enabled: true
         start: 1
+
+    # POST JSON 列表：請求本文帶佔位符（整值佔位符以原生型別代入）
+    - url: "https://example.com/api/search"
+      type: "json"
+      method: "POST"
+      json_body:
+        category: "{category}"
+        pageidx: "{page}"
+      extract:
+        items_path: "result.items"
+        url_field: "url"
+      pagination:
+        enabled: false
 
 article_page:
   type: "html"
