@@ -93,7 +93,7 @@ category_normalization: {}
 | 欄位 | 說明 | 預設值 |
 |------|------|--------|
 | `limits.max_items` | 最大爬取筆數，達到即停止 | `100` |
-| `limits.max_pages` | 最大爬取頁數上限（唯一權威值，`pagination` 只管 `enabled`/`start`） | `3` |
+| `limits.max_pages` | 最大爬取頁數上限（唯一權威值，`pagination` 只管 `enabled`/`type`/`start`/`next_cursor_path`） | `3` |
 | `limits.stop_on_duplicate` | 遇到重複 URL 即停止；未開啟則跳過繼續 | `false` |
 | `limits.timeout` | 整體爬取時間上限（秒） | `180` |
 

@@ -515,6 +515,64 @@ class TestListPageSourcesSchema:
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
+    def test_pagination_cursor_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api?cursor={cursor}",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "pagination": {
+                            "enabled": True,
+                            "type": "cursor",
+                            "start": 1,
+                            "next_cursor_path": "meta.pagination.next_cursor",
+                        },
+                    },
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_pagination_cursor_without_next_cursor_path_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api?cursor={cursor}",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "pagination": {"enabled": True, "type": "cursor"},
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_pagination_invalid_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "pagination": {"enabled": True, "type": "offset"},
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
     def test_missing_sources_rejected(self):
         data = {
             "name": "x",

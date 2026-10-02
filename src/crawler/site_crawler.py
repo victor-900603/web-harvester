@@ -165,7 +165,12 @@ class SiteCrawler(BaseCrawler):
             text += json.dumps(cfg["json_body"], ensure_ascii=False)
         return text
 
-    def _placeholder_values(self, cfg: Dict[str, Any], page_num: Optional[int]) -> "_FormatDict":
+    def _placeholder_values(
+        self,
+        cfg: Dict[str, Any],
+        page_num: Optional[int],
+        cursor: Optional[str] = None,
+    ) -> "_FormatDict":
         """Build the placeholder values for a list request (url and/or body).
 
         ``category`` is resolved through the ``categories`` mapping (name ->
@@ -195,6 +200,10 @@ class SiteCrawler(BaseCrawler):
             values["page"] = page_num
         elif "{page}" in template:
             values["page"] = cfg.get("pagination", {}).get("start", 1)
+        if cursor is not None:
+            values["cursor"] = cursor
+        elif "{cursor}" in template:
+            values["cursor"] = ""
 
         return values
 
@@ -211,26 +220,30 @@ class SiteCrawler(BaseCrawler):
             return [cls._substitute_placeholders(v, values) for v in obj]
         if isinstance(obj, str):
             stripped = obj.strip()
-            if stripped in ("{page}", "{keyword}", "{category}"):
+            if stripped in ("{page}", "{keyword}", "{category}", "{cursor}"):
                 return values.get(stripped[1:-1], stripped)
             return obj.format_map(values)
         return obj
 
-    def _build_list_url(self, page_num: Optional[int] = None) -> Optional[str]:
-        """Build a list page URL, filling {page}, {keyword} and {category} placeholders."""
+    def _build_list_url(
+        self, page_num: Optional[int] = None, cursor: Optional[str] = None
+    ) -> Optional[str]:
+        """Build a list page URL, filling {page}, {keyword}, {category} and {cursor} placeholders."""
         cfg = self._select_list_cfg()
         template = cfg.get("url", self.base_url)
-        values = self._placeholder_values(cfg, page_num)
+        values = self._placeholder_values(cfg, page_num, cursor)
         return template.format_map(values)
 
-    def _build_list_body(self, page_num: Optional[int] = None) -> tuple:
+    def _build_list_body(
+        self, page_num: Optional[int] = None, cursor: Optional[str] = None
+    ) -> tuple:
         """Build the (raw_body, json_body) for a list request, filling placeholders."""
         cfg = self._select_list_cfg()
         body = cfg.get("body")
         json_body = cfg.get("json_body")
         if body is None and json_body is None:
             return None, None
-        values = self._placeholder_values(cfg, page_num)
+        values = self._placeholder_values(cfg, page_num, cursor)
         if body is not None:
             body = body.format_map(values)
         if json_body is not None:
@@ -249,6 +262,23 @@ class SiteCrawler(BaseCrawler):
         if pagination.get("enabled", False):
             start = pagination.get("start", 1)
             max_pages = self._limits.get("max_pages", 1)
+
+            if pagination.get("type", "page") == "cursor":
+                url = self._build_list_url(page_num=start)
+                if url is None:
+                    return
+                body, json_body = self._build_list_body(page_num=start)
+                yield Request(
+                    url=url,
+                    method=method,
+                    headers=headers,
+                    cookies=cookies,
+                    body=body,
+                    json_body=json_body,
+                    callback="parse_list",
+                    meta={"page": start, "cursor": None},
+                )
+                return
 
             for page_num in range(start, start + max_pages):
                 url = self._build_list_url(page_num=page_num)
@@ -313,6 +343,56 @@ class SiteCrawler(BaseCrawler):
             count += 1
             yield result
         logger.info(f"List page parsed: {response.url} -> {count} link(s)")
+
+        next_request = self._build_next_cursor_request(response)
+        if next_request is not None:
+            yield next_request
+
+    def _build_next_cursor_request(self, response: Response) -> Optional[Request]:
+        """Return the next list Request for cursor pagination, or None to stop.
+
+        Cursor pagination follows the next-page token found in the list response
+        (``pagination.next_cursor_path``) into the ``{cursor}`` placeholder and is
+        bounded by ``max_pages``.
+        """
+        cfg = self._select_list_cfg()
+        pagination = cfg.get("pagination", {})
+        if not pagination.get("enabled", False):
+            return None
+        if pagination.get("type", "page") != "cursor":
+            return None
+        if cfg.get("type") != "json":
+            return None
+
+        start = pagination.get("start", 1)
+        max_pages = self._limits.get("max_pages", 1)
+        meta = response.meta or {}
+        page = meta.get("page", start)
+        if page >= start + max_pages - 1:
+            return None
+
+        path = pagination.get("next_cursor_path")
+        if not path:
+            return None
+        next_cursor = JSONParser(response.text).extract_path(path)
+        if not next_cursor:
+            return None
+
+        next_page = page + 1
+        url = self._build_list_url(page_num=next_page, cursor=next_cursor)
+        if url is None:
+            return None
+        body, json_body = self._build_list_body(page_num=next_page, cursor=next_cursor)
+        return Request(
+            url=url,
+            method=cfg.get("method", "GET"),
+            headers=self._request_cfg.get("headers", {}),
+            cookies=self._request_cfg.get("cookies", {}),
+            body=body,
+            json_body=json_body,
+            callback="parse_list",
+            meta={"page": next_page, "cursor": next_cursor},
+        )
             
     def _parse_html_list(
         self, 

@@ -148,7 +148,7 @@ tags:                                # §7
 | 欄位 | 類型 | 必填 | 預設（全域） | 說明 |
 |------|------|------|--------------|------|
 | `max_items` | `integer` `>=1` | 否 | `100` | 收集達標即停止（engine 逐項計數） |
-| `max_pages` | `integer` `>=1` | 否 | `3` | 列表頁數上限，唯一權威值；`pagination` 僅管 `enabled` / `start`（`src/crawler/site_crawler.py:202-205` `range(start, start + max_pages)`） |
+| `max_pages` | `integer` `>=1` | 否 | `3` | 列表頁數上限，唯一權威值；`pagination` 僅管 `enabled` / `type` / `start` / `next_cursor_path`（`src/crawler/site_crawler.py` `start_requests` / `_build_next_cursor_request`） |
 | `stop_on_duplicate` | `boolean` | 否 | `false` | `true` 遇到重複 URL 即停止；`false` 僅跳過該 URL 繼續 |
 | `timeout` | `number` `>0` | 否 | `180` | 整體爬取逾時（秒） |
 
@@ -248,10 +248,14 @@ request:
 
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
-| `enabled` | `boolean` | 是 | - | 是否分頁；`false` 時僅請求單頁（`site_crawler.py:200-227`） |
-| `start` | `integer` `>=0` | 否 | `1` | 起始頁碼；0 基 API 可設 `0` |
+| `enabled` | `boolean` | 是 | - | 是否分頁；`false` 時僅請求單頁 |
+| `type` | `string` | 否 | `page` | 分頁型態：`page`（以 `{page}` 遞增）或 `cursor`（跟隨回應中的下一頁游標） |
+| `start` | `integer` `>=0` | 否 | `1` | `page` 型態的起始頁碼；0 基 API 可設 `0`。`cursor` 型態時作為頁數計數基準 |
+| `next_cursor_path` | `string` | `type: cursor` 時必填 | - | 回應內「下一頁游標」的 JSON 路徑（如 `meta.pagination.next_cursor`） |
 
-實際爬取頁數由 `limits.max_pages` 控制：`range(start, start + max_pages)`。`pagination` 不決定總頁數，僅決定起始與是否啟用。
+**page 型態（預設）**：實際爬取頁數由 `limits.max_pages` 控制，`start_requests` 產生 `range(start, start + max_pages)` 個請求；`pagination` 不決定總頁數，僅決定起始與是否啟用。
+
+**cursor 型態**：首個請求以空游標發出（URL 的 `{cursor}` 填 `""`）；每解析完一頁後，由 `next_cursor_path` 取出下一頁游標，填入 URL 的 `{cursor}` 產生下一頁請求（callback 仍為 `parse_list`），直到無游標或已達 `max_pages` 頁（`site_crawler.py:_build_next_cursor_request`）。適用於 cursor / token 型分頁 API（如 TVBS）。`cursor` 型態目前僅支援 `type: json` 的來源。
 
 ### 5.5 categories
 
@@ -530,9 +534,10 @@ CLI `--keyword` / `--category` 為選用、可組合，需站點 `sources[].url`
 
 | 佔位符 | 來源 | 填值規則 |
 |--------|------|----------|
-| `{page}` | 分頁迴圈 | `pagination.start` 起算，`max_pages` 控制上限（`site_crawler.py:180-188,205`）；非分頁時填 `start` |
+| `{page}` | 分頁迴圈 | `pagination.start` 起算，`max_pages` 控制上限；非分頁時填 `start` |
 | `{keyword}` | `--keyword` | 有則填值，無則空字串（`site_crawler.py:181-183` `_FormatDict`） |
 | `{category}` | `--category` | 有則查 `categories` 表轉站內值（不在表則用原名並 `warning`）；無則填 `category_default`（預設空字串，`site_crawler.py:169-179`） |
+| `{cursor}` | `pagination.type: cursor` | 首頁填空字串；後續頁由 `next_cursor_path` 從回應取出並填入（`site_crawler.py:_build_next_cursor_request`） |
 
 URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串或 `start` 補齊，不中斷流程。`body` / `json_body` 亦支援同一組佔位符（見 [§5.6](#56-post-請求本文body--json_body)）。
 
@@ -563,10 +568,10 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 
 | 錯誤訊息要點 | 原因 | 修正 |
 |--------------|------|------|
-| `additionalProperties` | 欄位拼寫錯誤或層級放錯（`additionalProperties: false`） | 檢查欄位名與縮排；`request` 僅允許 `headers`/`cookies`，`pagination` 僅 `enabled`/`start` |
+| `additionalProperties` | 欄位拼寫錯誤或層級放錯（`additionalProperties: false`） | 檢查欄位名與縮排；`request` 僅允許 `headers`/`cookies`，`pagination` 僅 `enabled`/`type`/`start`/`next_cursor_path` |
 | `is not one of ['html', 'json']` | `type` / `source` / `from` 枚舉錯誤 | `type: html\|json`；`source: url\|html\|json\|keyword`；`from: json_ld\|list_data\|article_json` |
 | `is not one of ['GET', 'POST']` | `method` 大小寫錯誤 | 僅接受大寫 `GET` / `POST` |
-| `is not of type 'string'` / `minimum` / `pattern` | 型別或數值範圍不符 | `name` 非空、`base_url` 須 `^https?://`、`max_items`/`max_pages` `>=1`、`timeout` `>0`、`start` `>=1` |
+| `is not of type 'string'` / `minimum` / `pattern` | 型別或數值範圍不符 | `name` 非空、`base_url` 須 `^https?://`、`max_items`/`max_pages` `>=1`、`timeout` `>0`、`start` `>=0` |
 | `allOf` / `list_extract_html` / `list_extract_json` 失敗 | 來源 `extract` 形態與 `type` 不一致或缺少必填欄位 | `type: html` 需 `extract.item_selector`；`type: json` 需 `extract.items_path` 與 `url_field`；不可跨形態混用 |
 | `html_field_config` 要求 `selector` / `json_field_config` 要求 `path` | `article_page.type` 與 `fields` 形態不一致 | `type: html` 時物件必含 `selector`，`type: json` 必含 `path`（`allOf if/then`） |
 | `is not of type 'array'` / `minItems` | `sources` / `rules` / `keywords` 空陣列 | `sources` / `rules` / `keywords` 至少 1 項 |
@@ -635,7 +640,9 @@ list_page:
         link_attr: "href"                # 選填，預設 href，text 表示取文字
       pagination:                        # $defs/pagination
         enabled: true                    # 必填 boolean
+        type: "page"                     # 選填 enum page|cursor，預設 page
         start: 1                         # integer >=0，預設 1
+        # next_cursor_path: "meta.pagination.next_cursor"  # type: cursor 時必填
 
     # 來源 2：關鍵字搜尋（宣告支援 {keyword}）
     - url: "https://example.com/search?q={keyword}&page={page}"
@@ -668,6 +675,19 @@ list_page:
       extract:
         items_path: "result.items"
         url_field: "url"
+
+    # 來源 5：cursor 分頁 JSON 列表（首頁空游標，後續由回應的 next_cursor 帶入）
+    - url: "https://example.com/api/realtime?cursor={cursor}"
+      type: "json"
+      extract:
+        items_path: "data"
+        url_field: "article_url"
+        url_template: "{url}"
+      pagination:
+        enabled: true
+        type: "cursor"
+        start: 1
+        next_cursor_path: "meta.pagination.next_cursor"  # 回應內下一頁游標路徑
 
 # ── article_page 選填 (§6) ──
 article_page:

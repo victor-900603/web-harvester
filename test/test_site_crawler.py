@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from src.core import Item, Request
+from src.core import Item, Request, Response
 from src.crawler import SiteCrawler
 from conftest import make_response
 
@@ -73,6 +73,26 @@ class TestStartRequests:
         reqs = list(crawler.start_requests())
         assert [r.json_body for r in reqs] == [{"pageidx": 1}, {"pageidx": 2}]
         assert all(r.body is None for r in reqs)
+
+    def test_cursor_pagination_yields_single_request_with_empty_cursor(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {
+                "url": "https://example.com/api?cursor={cursor}",
+                "type": "json",
+                "extract": {"items_path": "data", "url_field": "url"},
+                "pagination": {
+                    "enabled": True,
+                    "type": "cursor",
+                    "start": 1,
+                    "next_cursor_path": "meta.pagination.next_cursor",
+                },
+            },
+        ]
+        crawler = SiteCrawler(sample_site_config)
+        reqs = list(crawler.start_requests())
+        assert len(reqs) == 1
+        assert reqs[0].url == "https://example.com/api?cursor="
+        assert reqs[0].meta == {"page": 1, "cursor": None}
 
     def test_limits_property(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
@@ -375,6 +395,82 @@ class TestParseList:
         results = list(crawler.parse_list(resp))
         assert len(results) == 1
         assert results[0].url == "https://example.com/news/1"
+
+    def _cursor_config(self, sample_site_config, max_pages=3):
+        sample_site_config["limits"]["max_pages"] = max_pages
+        sample_site_config["list_page"] = {
+            "sources": [
+                {
+                    "url": "https://example.com/api?cursor={cursor}",
+                    "type": "json",
+                    "extract": {"items_path": "data", "url_field": "url"},
+                    "pagination": {
+                        "enabled": True,
+                        "type": "cursor",
+                        "start": 1,
+                        "next_cursor_path": "meta.pagination.next_cursor",
+                    },
+                },
+            ],
+        }
+
+    def test_cursor_pagination_yields_next_page_request(self, sample_site_config):
+        self._cursor_config(sample_site_config)
+        crawler = SiteCrawler(sample_site_config)
+        req = Request(
+            url="https://example.com/api?cursor=",
+            callback="parse_list",
+            meta={"page": 1, "cursor": None},
+        )
+        resp = Response(
+            url=req.url,
+            status_code=200,
+            text='{"data": [{"url": "https://example.com/a"}], '
+            '"meta": {"pagination": {"next_cursor": "abc"}}}',
+            request=req,
+        )
+        results = list(crawler.parse_list(resp))
+        assert results[0].url == "https://example.com/a"
+        next_req = results[-1]
+        assert isinstance(next_req, Request)
+        assert next_req.callback == "parse_list"
+        assert next_req.url == "https://example.com/api?cursor=abc"
+        assert next_req.meta == {"page": 2, "cursor": "abc"}
+
+    def test_cursor_pagination_stops_at_max_pages(self, sample_site_config):
+        self._cursor_config(sample_site_config, max_pages=1)
+        crawler = SiteCrawler(sample_site_config)
+        req = Request(
+            url="https://example.com/api?cursor=",
+            callback="parse_list",
+            meta={"page": 1, "cursor": None},
+        )
+        resp = Response(
+            url=req.url,
+            status_code=200,
+            text='{"data": [{"url": "https://example.com/a"}], '
+            '"meta": {"pagination": {"next_cursor": "abc"}}}',
+            request=req,
+        )
+        results = list(crawler.parse_list(resp))
+        assert all(r.callback == "parse_article" for r in results)
+
+    def test_cursor_pagination_stops_without_next_cursor(self, sample_site_config):
+        self._cursor_config(sample_site_config)
+        crawler = SiteCrawler(sample_site_config)
+        req = Request(
+            url="https://example.com/api?cursor=",
+            callback="parse_list",
+            meta={"page": 1, "cursor": None},
+        )
+        resp = Response(
+            url=req.url,
+            status_code=200,
+            text='{"data": [{"url": "https://example.com/a"}], "meta": {"pagination": {}}}',
+            request=req,
+        )
+        results = list(crawler.parse_list(resp))
+        assert all(r.callback == "parse_article" for r in results)
 
     def test_json_list_object_values_are_iterated(self, sample_site_config):
         sample_site_config["list_page"] = {
