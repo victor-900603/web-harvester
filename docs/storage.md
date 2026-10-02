@@ -28,7 +28,7 @@ database:
 | `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
 | `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
 
-JSON 為 batch 模式，`close` 時才寫檔，檔名為 `{source}_{date}.json`。
+JSON 為 batch 模式，`close` 時才寫檔，檔名為 `{source}_{YYYYmmdd_HHMMSS}.json`（`date` 為時間戳）。
 
 ### database
 

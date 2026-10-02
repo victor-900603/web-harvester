@@ -9,9 +9,8 @@
 - **TLS 指紋偽裝**：基於 `curl_cffi` 的瀏覽器指紋模擬（JA3/Akamai），支援 `chrome`/`safari`/`firefox`/`edge`  impersonate 與自訂 `ja3`/`akamai`，預設 `chrome131`，可切回 `httpx`
 - **複合解析器**：可解析 HTML（BeautifulSoup）與 JSON 格式的列表頁與文章頁
 - **多種儲存後端**：JSON 檔案、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
-- **分頁爬取**：自動依設定逐頁取得列表
-- **重試機制**：可設定失敗請求的最大重試次數
-- **彩色日誌**：透過 `colorlog` 輸出結構化日誌
+- **分頁爬取**：支援頁碼（`{page}`）與游標（`{cursor}`）兩種分頁模式
+- **重試機制**：可設定最大重試次數，支援指數回退與 `Retry-After`（僅重試可重試錯誤）
 
 ## 專案結構
 
@@ -92,7 +91,7 @@ python -m pytest test
 - HTML / JSON 解析器
 - SiteCrawler 分頁、列表與文章解析
 - 引擎 sync / async 模式的 `max_items` / `stop_on_duplicate` / `timeout` 限制
-- 非 2xx HTTP 回應觸發重試、失敗後不解析
+- 可重試錯誤（HTTP 408/429/5xx、連線/逾時等傳輸錯誤）才重試，其餘 4xx 直接失敗
 - JSON 與資料庫儲存後端
 
 ## 快速開始
@@ -140,9 +139,9 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 最小範例請見 `config/sites/example.yaml`。完整欄位、範例與選項說明請見 [docs/site-config.md](docs/site-config.md)，包含：
 
 - 頂層欄位速查與最小/完整 YAML 範例
-- `limits` / `request` / `list_page`（self-contained `sources`、`extract`、`pagination`、`categories`、POST `body` / `json_body`）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
+- `limits` / `request` / `list_page`（self-contained `sources`、`extract`、頁碼/游標 `pagination`、`categories`、POST `body` / `json_body`、JSON `url_filter`）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
 - 分類與標籤（`category` / `tags` / `category_normalization`，4 種來源 `source: html|url|json|keyword` 與 `json.from` 對照）
-- 搜尋與篩選（`{page}` / `{keyword}` / `{category}` 佔位符與來源選擇決策表）
+- 搜尋與篩選（`{page}` / `{keyword}` / `{category}` / `{cursor}` 佔位符與來源選擇決策表）
 - 驗證與除錯（常見 `ConfigValidationError` 對照）
 
 新增或修改網站設定後，可直接執行 `python main.py --site <site_id>`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。

@@ -417,7 +417,7 @@ fields:
 | `split` | `string` | 否 | - | 將單一字串拆為多值 |
 | `mapping` | `object<string,string>` | 否 | - | 值轉換表 |
 
-萃取規則（`classifier.py:122-146`）：`join` 存在時遍歷 `parser.select(selector)` 全部拼接；`multiple: true` 時回陣列；否則取首個匹配（`parser.extract`）。
+萃取規則（`classifier.py:122-131`）：`join` 存在時遍歷 `parser.select(selector)` 全部拼接；`multiple: true` 時回陣列；否則取首個匹配（`parser.extract`）。
 
 #### json 來源（`source: json`，`classifier.py:_extract_json`）
 
@@ -425,7 +425,7 @@ fields:
 |------|------|------|------|------|
 | `source` | `const: "json"` | 是 | - | 來源類型識別 |
 | `from` | `enum: json_ld\|list_data\|article_json` | 是 | - | 資料源（見下表） |
-| `path` | `string` | 是 | - | dot 分隔 JSON path（`classifier.py:159,169,173`） |
+| `path` | `string` | 是 | - | dot 分隔 JSON path；陣列索引用數字（如 `0.articleSection`）（`classifier.py:_extract_json`） |
 | `split` | `string` | 否 | - | 將單一字串拆為多值 |
 | `mapping` | `object<string,string>` | 否 | - | 值轉換表 |
 
@@ -433,7 +433,7 @@ fields:
 
 | `from` | 資料來源 | 說明 |
 |--------|----------|------|
-| `json_ld` | 文章 HTML 內第一個 `script[type="application/ld+json"]` | 遍歷所有 JSON-LD 區塊，首個命中 `path` 非空即回傳（`classifier.py:151-162`） |
+| `json_ld` | 文章 HTML 內第一個 `script[type="application/ld+json"]` | 遍歷所有 JSON-LD 區塊，首個命中 `path` 非空即回傳；若區塊為頂層陣列，`path` 需帶數字索引（如 `0.articleSection`），否則不命中（`classifier.py:136-147`） |
 | `list_data` | 列表 JSON 的 `meta.list_data`（`site_crawler.py:334` 注入） | 取自列表頁對應 item 的原始 JSON；`path` 為相對於該 item 的路徑 |
 | `article_json` | 文章 JSON 回應全文 | 直接對 `response.text` 的 JSON 解析結果取 `path`（`classifier.py:171-173`） |
 
