@@ -1,6 +1,6 @@
 # AGENTS.md
 
-設定檔驅動的新聞爬蟲框架（Python）。無測試框架、無 lint/typecheck 設定。
+設定檔驅動的新聞爬蟲框架（Python）。測試使用 pytest（`test/`），無 lint/typecheck 設定。
 
 ## 開發指令
 
@@ -17,17 +17,17 @@ main.py → Settings (config/settings.yaml) → setup_logging
 ```
 
 - 換目標網站：`python main.py --site <site_id>`（site yaml 檔名不含副檔名），在 `config/sites/<name>.yaml` 新增對應設定
-- `engine.mode`（`sync`/`async`）由 `config/settings.yaml` 控制；async 用 `asyncio` + `httpx.AsyncClient`，sync 用 `httpx.Client`
+- `engine.mode`（`sync`/`async`）由 `config/settings.yaml` 控制；HTTP client 由 `request.http_client` 決定（預設 `curl_cffi`，可切 `httpx`）
 - 列表來源：`list_page` 只承載 `sources`/`categories`/`category_default`；`sources` 為必填陣列，每個來源 self-contained（`url`/`type`/`extract` 必填，`method`/`pagination`/`body`/`json_body` 選用），彼此不繼承不合併；來源 URL 與 `body`/`json_body` 支援 `{page}`/`{keyword}`/`{category}` 佔位符，由 `SiteCrawler._select_list_cfg`（site_crawler.py）依請求篩選選擇來源（精確 → 超集 → 降級 → 預設，結果快取於 `_selected_list_cfg`），`_build_list_url`/`_build_list_body` 填值；`--category` 傳名稱經 `categories` 對應表轉站內值
 - 全域 `request` 區塊的 `user_agent` / `verify_ssl` 自動套用到所有請求；site 層級 `request.headers/cookies` 僅套用到該站
-- 儲存後端由 `build_engine`（engine.py:376）依 settings 掛載：JSON（batch 模式，close 時才寫檔，檔名 `{source}_{date}.json`）+ SQLAlchemy（預設 SQLite）
+- 儲存後端由 `build_engine`（engine.py:369）依 settings 掛載：JSON（batch 模式，close 時才寫檔，檔名 `{source}_{YYYYmmdd_HHMMSS}.json`）+ SQLAlchemy（預設 SQLite）
 
 ## Config 與 Schema
 
 - 所有 YAML 載入時以 `config/schema/` 下的 JSON Schema 嚴格驗證（fail-fast，`additionalProperties: false`），違規拋 `ConfigValidationError`（src/utils/config.py:28）
 - 修改或新增 config 欄位時，必須同步更新對應 schema（settings.schema.json / site.schema.json），否則載入直接失敗
 - `list_page` required 為 `["sources"]`；每個 `sources[*]` required 為 `["url","type","extract"]`，`extract` 依 `type` 以 `allOf` if/then 對應 `$defs/list_extract_html`（required `item_selector`）或 `$defs/list_extract_json`（required `items_path`/`url_field`）
-- `limits` 語意（同步/非同步都支援），最終值採三層合併（`src/utils/config.py:merge_limits`，後者覆寫、略過 None）：**CLI 參數（`build_cli_limits`，main.py）> site `limits`（選用覆寫）> settings `limits`（全域預設，`config/settings.yaml`）> 程式碼預設**：
+- `limits` 語意（同步/非同步都支援），最終值採四層合併（`src/utils/config.py:merge_limits`，後者覆寫、略過 None）：**CLI 參數（`build_cli_limits`，main.py）> site `limits`（選用覆寫）> settings `limits`（全域預設，`config/settings.yaml`）> 程式碼預設**：
   - `max_items`：收集達標即停止
   - `stop_on_duplicate`：遇到重複 URL 即停止；未開啟則跳過繼續
   - `timeout`：整體爬取逾時（秒）
@@ -36,7 +36,7 @@ main.py → Settings (config/settings.yaml) → setup_logging
 
 ## 已知陷阱
 
-- udn 站的文章 selectors 部分回傳 None（site 設定與實際頁面結構不符，既有問題）
+- udn 部分文章的 `author` 會夾帶原始換行與多餘空白（站方欄位格式，未另行清理）
 - `data/`、`logs/`、`.venv/` 已在 .gitignore
 
 ## 規範
