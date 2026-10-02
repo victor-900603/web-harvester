@@ -97,26 +97,8 @@
     "list_page": {
       "type": "object",
       "additionalProperties": false,
-      "description": "List page configuration. Multiple named list sources (sources) provide distinct URL templates; a source can express a filter (keyword/category) if its URL contains the matching placeholder. Fields defined at this level (method/type/extract/pagination) act as defaults inherited by every source unless overridden.",
+      "description": "List page configuration. Each source is self-contained: it declares its own method/type/extract (plus optional body/json_body/pagination). A source expresses a filter (keyword/category) when its url/body/json_body contains the matching placeholder.",
       "properties": {
-        "method": {
-          "type": "string",
-          "enum": ["GET", "POST"],
-          "description": "Default request method inherited by all sources."
-        },
-        "type": {
-          "type": "string",
-          "enum": ["html", "json"],
-          "description": "Default response type inherited by all sources."
-        },
-        "extract": {
-          "$ref": "#/$defs/list_extract",
-          "description": "Default list extraction config inherited by all sources; deep-merged with a source's own extract."
-        },
-        "pagination": {
-          "$ref": "#/$defs/pagination",
-          "description": "Default pagination inherited by all sources."
-        },
         "sources": {
           "type": "array",
           "minItems": 1,
@@ -131,22 +113,50 @@
               },
               "method": {
                 "type": "string",
-                "enum": ["GET", "POST"]
+                "enum": ["GET", "POST"],
+                "description": "Request method (default: GET)."
               },
               "type": {
                 "type": "string",
-                "enum": ["html", "json"]
+                "enum": ["html", "json"],
+                "description": "Response type; determines the extract form and parser."
+              },
+              "body": {
+                "type": "string",
+                "description": "Raw request body. May contain {page}, {keyword} and {category} placeholders."
+              },
+              "json_body": {
+                "type": "object",
+                "description": "JSON request body. String values may contain {page}, {keyword} and {category} placeholders; a value that is exactly a placeholder is substituted with its native type (e.g. {page} becomes an integer)."
               },
               "extract": {
-                "$ref": "#/$defs/list_extract_partial"
+                "$ref": "#/$defs/list_extract"
               },
               "pagination": {
                 "$ref": "#/$defs/pagination"
               }
             },
-            "required": ["url"]
+            "required": ["url", "type", "extract"],
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "type": { "const": "html" } }
+                },
+                "then": {
+                  "properties": { "extract": { "$ref": "#/$defs/list_extract_html" } }
+                }
+              },
+              {
+                "if": {
+                  "properties": { "type": { "const": "json" } }
+                },
+                "then": {
+                  "properties": { "extract": { "$ref": "#/$defs/list_extract_json" } }
+                }
+              }
+            ]
           },
-          "description": "Ordered list of list URL templates. The first source without a {keyword} placeholder is the default list; keyword/category requests pick the best matching source (exact match first, then superset, then graceful degradation)."
+          "description": "Ordered list of self-contained list sources. The first source without a {keyword} placeholder is the default list; keyword/category requests pick the best matching source (exact match first, then superset, then graceful degradation)."
         },
         "categories": {
           "type": "object",
@@ -248,52 +258,14 @@
       "required": ["enabled"]
     },
     "list_extract": {
-      "description": "List page extract config. Use the HTML form for HTML list pages and the JSON form for JSON list pages.",
+      "description": "List extract config. Use the HTML form for HTML list sources and the JSON form for JSON list sources.",
       "oneOf": [
-        {
-          "title": "HTML list extract",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "item_selector": {
-              "type": "string",
-              "description": "CSS selector for the container of each list item."
-            },
-            "link_selector": {
-              "type": "string",
-              "description": "CSS selector for the link element within an item."
-            },
-            "link_attr": {
-              "type": "string",
-              "description": "Attribute to read the link URL from (default: href)."
-            }
-          },
-          "required": ["item_selector"]
-        },
-        {
-          "title": "JSON list extract",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "items_path": {
-              "type": "string",
-              "description": "JSON path to the list of items."
-            },
-            "url_field": {
-              "type": "string",
-              "description": "Field name holding the article URL within each item."
-            },
-            "url_template": {
-              "type": "string",
-              "description": "URL template with a {url} placeholder used to build the final URL."
-            }
-          },
-          "required": ["items_path", "url_field"]
-        }
+        { "$ref": "#/$defs/list_extract_html" },
+        { "$ref": "#/$defs/list_extract_json" }
       ]
     },
-    "list_extract_partial": {
-      "description": "Partial list extract override within a list source. Deep-merged over the list_page-level extract, so only the fields being overridden need to be present.",
+    "list_extract_html": {
+      "title": "HTML list extract",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -308,7 +280,15 @@
         "link_attr": {
           "type": "string",
           "description": "Attribute to read the link URL from (default: href)."
-        },
+        }
+      },
+      "required": ["item_selector"]
+    },
+    "list_extract_json": {
+      "title": "JSON list extract",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
         "items_path": {
           "type": "string",
           "description": "JSON path to the list of items."
@@ -321,7 +301,8 @@
           "type": "string",
           "description": "URL template with a {url} placeholder used to build the final URL."
         }
-      }
+      },
+      "required": ["items_path", "url_field"]
     },
     "classifier_source": {
       "description": "A single classification source. The 'source' field selects the extraction strategy; 'mapping' optionally translates raw values into display names.",

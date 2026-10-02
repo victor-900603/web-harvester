@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime
@@ -76,8 +77,16 @@ class SiteCrawler(BaseCrawler):
             self._selected_list_cfg = dict(self._list_cfg)
             return self._selected_list_cfg
 
+        def source_text(src: Dict[str, Any]) -> str:
+            text = src.get("url", "") or ""
+            if src.get("body"):
+                text += src["body"]
+            if src.get("json_body") is not None:
+                text += json.dumps(src["json_body"], ensure_ascii=False)
+            return text
+
         def supports(src: Dict[str, Any], token: str) -> bool:
-            return "{" + token + "}" in src.get("url", "")
+            return "{" + token + "}" in source_text(src)
 
         def has_keyword(src: Dict[str, Any]) -> bool:
             return supports(src, "keyword")
@@ -86,17 +95,9 @@ class SiteCrawler(BaseCrawler):
             return supports(src, "category")
 
         def defaults_of(src: Dict[str, Any]) -> Dict[str, Any]:
-            base = {k: v for k, v in self._list_cfg.items() if k in ("method", "type", "extract", "pagination")}
-            merged = dict(base)
-            for key in ("method", "type", "pagination"):
-                if key in src:
-                    merged[key] = src[key]
-            if "extract" in src:
-                base_extract = dict(base.get("extract", {}))
-                base_extract.update(src["extract"])
-                merged["extract"] = base_extract
-            merged["url"] = src["url"]
-            return merged
+            # Sources are self-contained: each one carries its own method/type/
+            # extract/pagination/body/json_body. No inheritance from list_page.
+            return dict(src)
 
         def _pick(pred) -> Optional[Dict[str, Any]]:
             return next((s for s in sources if pred(s)), None)
@@ -155,19 +156,25 @@ class SiteCrawler(BaseCrawler):
         self._selected_list_cfg = result
         return result
 
-    def _build_list_url(self, page_num: Optional[int] = None) -> Optional[str]:
-        """Build a list page URL, filling {page}, {keyword} and {category} placeholders.
+    def _combined_template(self, cfg: Dict[str, Any]) -> str:
+        """Concatenate url/body/json_body so placeholder support can be detected."""
+        text = cfg.get("url", "") or ""
+        if cfg.get("body"):
+            text += cfg["body"]
+        if cfg.get("json_body") is not None:
+            text += json.dumps(cfg["json_body"], ensure_ascii=False)
+        return text
+
+    def _placeholder_values(self, cfg: Dict[str, Any], page_num: Optional[int]) -> "_FormatDict":
+        """Build the placeholder values for a list request (url and/or body).
 
         ``category`` is resolved through the ``categories`` mapping (name ->
         in-site value). Unsupported requested filters are dropped with a warning
         instead of aborting the crawl.
         """
+        template = self._combined_template(cfg)
         keyword = self._keyword
         category_name = self._category
-        cfg = self._select_list_cfg()
-
-        template = cfg.get("url", self.base_url)
-
         categories = self._list_cfg.get("categories", {})
         category_value = ""
         if category_name:
@@ -189,7 +196,46 @@ class SiteCrawler(BaseCrawler):
         elif "{page}" in template:
             values["page"] = cfg.get("pagination", {}).get("start", 1)
 
+        return values
+
+    @classmethod
+    def _substitute_placeholders(cls, obj: Any, values: "_FormatDict") -> Any:
+        """Recursively substitute placeholders inside a JSON body.
+
+        A string that is exactly a placeholder is replaced with its native value
+        (e.g. ``"{page}"`` becomes an integer); other strings are interpolated.
+        """
+        if isinstance(obj, dict):
+            return {k: cls._substitute_placeholders(v, values) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [cls._substitute_placeholders(v, values) for v in obj]
+        if isinstance(obj, str):
+            stripped = obj.strip()
+            if stripped in ("{page}", "{keyword}", "{category}"):
+                return values.get(stripped[1:-1], stripped)
+            return obj.format_map(values)
+        return obj
+
+    def _build_list_url(self, page_num: Optional[int] = None) -> Optional[str]:
+        """Build a list page URL, filling {page}, {keyword} and {category} placeholders."""
+        cfg = self._select_list_cfg()
+        template = cfg.get("url", self.base_url)
+        values = self._placeholder_values(cfg, page_num)
         return template.format_map(values)
+
+    def _build_list_body(self, page_num: Optional[int] = None) -> tuple:
+        """Build the (raw_body, json_body) for a list request, filling placeholders."""
+        cfg = self._select_list_cfg()
+        body = cfg.get("body")
+        json_body = cfg.get("json_body")
+        if body is None and json_body is None:
+            return None, None
+        values = self._placeholder_values(cfg, page_num)
+        if body is not None:
+            body = body.format_map(values)
+        if json_body is not None:
+            json_body = self._substitute_placeholders(json_body, values)
+        return body, json_body
 
     def start_requests(self) -> Generator[Request, None, None]:
         """Generate initial requests to start crawling the site."""
@@ -208,11 +254,14 @@ class SiteCrawler(BaseCrawler):
                 url = self._build_list_url(page_num=page_num)
                 if url is None:
                     continue
+                body, json_body = self._build_list_body(page_num=page_num)
                 yield Request(
                     url=url,
                     method=method,
                     headers=headers,
                     cookies=cookies,
+                    body=body,
+                    json_body=json_body,
                     callback="parse_list",
                     meta={"page": page_num},
                 )
@@ -220,11 +269,14 @@ class SiteCrawler(BaseCrawler):
             url = self._build_list_url()
             if url is None:
                 return
+            body, json_body = self._build_list_body()
             yield Request(
                 url=url,
                 method=method,
                 headers=headers,
                 cookies=cookies,
+                body=body,
+                json_body=json_body,
                 callback="parse_list",
             )
     

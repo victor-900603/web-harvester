@@ -149,14 +149,18 @@ class TestValidateConfig:
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "type": "html",
-                "sources": [{"url": "https://example.com"}],
-                "extract": {
-                    "item_selector": "a",
-                    "link_selector": "a",
-                    "link_attr": "href",
-                    "url_field": "url",
-                },
+                "sources": [
+                    {
+                        "url": "https://example.com",
+                        "type": "html",
+                        "extract": {
+                            "item_selector": "a",
+                            "link_selector": "a",
+                            "link_attr": "href",
+                            "url_field": "url",
+                        },
+                    },
+                ],
             },
         }
         with pytest.raises(ConfigValidationError):
@@ -289,12 +293,16 @@ class TestListPageSourcesSchema:
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "type": "html",
                 "sources": [
-                    {"url": "https://example.com/news?page={page}&cat={category}"},
+                    {
+                        "url": "https://example.com/news?page={page}&cat={category}",
+                        "type": "html",
+                        "extract": {"item_selector": "article.news-item"},
+                    },
                     {
                         "url": "https://example.com/search?q={keyword}&page={page}",
                         "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
                     },
                 ],
                 "categories": {"股市": "7251", "政治": "6645"},
@@ -303,22 +311,151 @@ class TestListPageSourcesSchema:
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
-    def test_source_partial_extract_valid(self):
+    def test_source_full_extract_valid(self):
         data = {
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "type": "json",
-                "extract": {"items_path": "lists", "url_field": "titleLink"},
                 "sources": [
                     {
                         "url": "https://example.com/api?page={page}",
-                        "extract": {"url_template": "https://example.com{url}"},
+                        "type": "json",
+                        "extract": {
+                            "items_path": "lists",
+                            "url_field": "titleLink",
+                            "url_template": "https://example.com{url}",
+                        },
                     },
                 ],
             },
         }
         validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_body_and_json_body_valid(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "body": "raw={keyword}",
+                        "json_body": {"category": "{category}", "pageidx": "{page}"},
+                    },
+                ],
+            },
+        }
+        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_json_body_wrong_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "json_body": "not-an-object",
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_body_wrong_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com/api",
+                        "type": "json",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                        "body": {"a": 1},
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_missing_type_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {"url": "https://example.com", "extract": {"item_selector": "a"}},
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_missing_extract_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [{"url": "https://example.com", "type": "html"}],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_type_html_with_json_extract_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com",
+                        "type": "html",
+                        "extract": {"items_path": "data", "url_field": "url"},
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_source_type_json_with_html_extract_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "sources": [
+                    {
+                        "url": "https://example.com",
+                        "type": "json",
+                        "extract": {"item_selector": "a"},
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+
+    def test_list_page_legacy_keys_rejected(self):
+        data = {
+            "name": "x",
+            "base_url": "https://example.com",
+            "list_page": {
+                "type": "html",
+                "extract": {"item_selector": "a"},
+                "pagination": {"enabled": True},
+                "sources": [{"url": "https://example.com", "type": "html", "extract": {"item_selector": "a"}}],
+            },
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
 
     def test_missing_sources_rejected(self):
         data = {
@@ -373,8 +510,13 @@ class TestListPageSourcesSchema:
             "name": "x",
             "base_url": "https://example.com",
             "list_page": {
-                "type": "html",
-                "sources": [{"url": "https://example.com/news?cat={category}"}],
+                "sources": [
+                    {
+                        "url": "https://example.com/news?cat={category}",
+                        "type": "html",
+                        "extract": {"item_selector": "a"},
+                    },
+                ],
                 "categories": {"股市": 7251},
             },
         }

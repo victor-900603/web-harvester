@@ -47,12 +47,13 @@ name: "example"
 base_url: "https://example.com"
 
 list_page:
-  extract:
-    item_selector: "article.news-item"  # 每筆列表項容器
-    link_selector: "a"                  # 容器內的連結元素
-    link_attr: "href"                   # 連結屬性
   sources:
     - url: "https://example.com/news?page={page}"
+      type: "html"
+      extract:
+        item_selector: "article.news-item"  # 每筆列表項容器
+        link_selector: "a"                  # 容器內的連結元素
+        link_attr: "href"                   # 連結屬性
 
 article_page:
   type: "html"
@@ -85,22 +86,29 @@ request:                             # §4
     session: "xxx"
 
 list_page:                           # §5
-  method: "GET"                      # 繼承預設：GET | POST
-  type: "html"                       # 繼承預設：html | json
   categories:                        # --category 名稱 → 站內值
     "股市": "7251"
     "政治": "6645"
   category_default: "0"              # 未指定 --category 時 {category} 填值
-  extract:                           # 繼承預設，深合併至各 source
-    item_selector: "article.news-item"
-    link_selector: "a"
-    link_attr: "href"
-  pagination:                        # 繼承預設
-    enabled: true
-    start: 1
-  sources:                           # 必填，至少一項
+  sources:                           # 必填，至少一項；每個來源自帶完整設定
     - url: "https://example.com/news?page={page}&cat={category}"
+      type: "html"
+      extract:
+        item_selector: "article.news-item"
+        link_selector: "a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
     - url: "https://example.com/search?q={keyword}&page={page}"
+      type: "html"
+      extract:
+        item_selector: "div.search-item"
+        link_selector: "a.title"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
 
 article_page:                        # §6
   type: "html"                       # html | json
@@ -180,40 +188,43 @@ request:
 
 ## 5. list_page
 
-`list_page`（`config/schema/site.schema.json:97-165`）為選填物件；一旦提供，`sources` 必填。`method` / `type` / `extract` / `pagination` 為所有 `sources` 的繼承預設值。
+`list_page`（`config/schema/site.schema.json`）為選填物件；一旦提供，`sources` 必填。`list_page` 本身只承載 `sources` / `categories` / `category_default`；**每個 `source` 皆為 self-contained，各自帶 `type`（必填）、`extract`（必填）以及選用的 `method` / `pagination` / `body` / `json_body`，彼此不繼承、不合併**（`src/crawler/site_crawler.py:_select_list_cfg` 直接回傳選中的來源設定）。
 
-### 5.1 繼承模型
+### 5.1 來源設定模型
 
-單一 `source` 內同名欄位覆蓋規則（`src/crawler/site_crawler.py:88-98`）：
+每個 `source` 獨立、完整，無跨來源或跨 `list_page` 的預設值：
 
-| 欄位 | 合併方式 | 說明 |
+| 欄位 | 是否必填 | 說明 |
 |------|----------|------|
-| `method` | 直接覆蓋 | 來源未寫則沿用 `list_page.method`，否則取來源值 |
-| `type` | 直接覆蓋 | 同上（`html` / `json` 決定解析分支 `src/crawler/site_crawler.py:247-255`） |
-| `pagination` | 直接覆蓋 | 同上 |
-| `extract` | 深合併（shallow merge） | `dict(base_extract, **source_extract)`；來源只需寫差異欄位，例如僅覆蓋 `url_template`（`src/crawler/site_crawler.py:94-97`） |
-| `url` | 來源自有 | 無繼承，每個來源獨立 |
+| `url` | 是 | 列表 URL 模板，每個來源獨立 |
+| `type` | 是 | `html` / `json`，決定 `extract` 形態與解析分支（`src/crawler/site_crawler.py:parse_list`） |
+| `extract` | 是 | 完整形態（含 `required`），HTML 或 JSON 二選一，須與 `type` 一致（schema `allOf if/then`） |
+| `method` | 否 | `GET`（預設）/ `POST` |
+| `pagination` | 否 | 選用；未提供時視為不分頁 |
+| `body` / `json_body` | 否 | POST 請求本文，見 [§5.6](#56-post-請求本文body--json_body) |
 
 ### 5.2 sources
 
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
 | `url` | `string` `minLength:1` | 是 | - | 列表 URL 模板，可含 `{page}` / `{keyword}` / `{category}` 佔位符（見 [§8.1](#81-佔位符)）；出現即宣告該來源支援對應篩選 |
-| `method` | `enum: GET\|POST` | 否 | 繼承 `list_page.method` → `GET` | 覆蓋繼承預設 |
-| `type` | `enum: html\|json` | 否 | 繼承 `list_page.type` → `html` | 覆蓋繼承預設，決定 `extract` 形態與解析器 |
-| `extract` | `object` (`$defs/list_extract_partial`) | 否 | 繼承 `list_page.extract` | 部分 extract，深合併 |
-| `pagination` | `object` (`$defs/pagination`) | 否 | 繼承 `list_page.pagination` | 覆蓋繼承預設 |
+| `type` | `enum: html\|json` | 是 | - | 決定 `extract` 形態與解析器；須與 `extract` 形態一致（schema `allOf if/then`） |
+| `extract` | `object` | 是 | - | 完整 extract，依 `type` 為 HTML 或 JSON 形態（見 [§5.3](#53-extract)） |
+| `method` | `enum: GET\|POST` | 否 | `GET` | 請求方法 |
+| `pagination` | `object` (`$defs/pagination`) | 否 | 不分頁 | 見 [§5.4](#54-pagination) |
+| `body` | `string` | 否 | - | 原始請求本文（POST），可含 `{page}` / `{keyword}` / `{category}` 佔位符（見 [§5.6](#56-post-請求本文body--json_body)） |
+| `json_body` | `object` | 否 | - | JSON 請求本文（POST），字串值可含佔位符（見 [§5.6](#56-post-請求本文body--json_body)） |
 
 第一個不含 `{keyword}` 的來源為預設來源（皆含時取 `sources[0]`）；關鍵字/分類請求的來源選擇見 [§8.2](#82-來源選擇)。
 
 ### 5.3 extract
 
-依列表回應類型二選一，不可混用（`$defs/list_extract` `oneOf`，`src/crawler/site_crawler.py:252-255` 分派）。`list_page.extract` 為完整形態（含 `required`），`sources[].extract` 為部分形態（`$defs/list_extract_partial`，全選填、深合併）。
+每個來源的 `extract` 為完整形態（含 `required`），依 `type` 二選一、不可混用（`$defs/list_extract_html` / `$defs/list_extract_json`，schema `allOf if/then`；`src/crawler/site_crawler.py:parse_list` 依 `type` 分派）。
 
 #### HTML 列表（`type: html`，`src/crawler/site_crawler.py:_parse_html_list`）
 
-| 欄位 | 類型 | 必填（`list_page.extract`） | 預設（程式） | 說明 |
-|------|------|------------------------------|--------------|------|
+| 欄位 | 類型 | 必填 | 預設（程式） | 說明 |
+|------|------|------|--------------|------|
 | `item_selector` | `string` | 是 | `"a"`（僅 `_parse_html_list` 內） | 每筆列表項容器的 CSS selector |
 | `link_selector` | `string` | 否 | `"a"` | 容器內連結元素的 CSS selector；等於 `item_selector` 時直接取容器本身（`site_crawler.py:273`） |
 | `link_attr` | `string` | 否 | `"href"` | 連結屬性名；`text` 表示取元素文字（`site_crawler.py:277`） |
@@ -222,8 +233,8 @@ request:
 
 #### JSON 列表（`type: json`，`src/crawler/site_crawler.py:_parse_json_list`）
 
-| 欄位 | 類型 | 必填（`list_page.extract`） | 預設（程式） | 說明 |
-|------|------|------------------------------|--------------|------|
+| 欄位 | 類型 | 必填 | 預設（程式） | 說明 |
+|------|------|------|--------------|------|
 | `items_path` | `string` | 是 | `""`（根） | 指向陣列的 JSON path（dot 分隔，空字串表示根即陣列；`site_crawler.py:309-313`） |
 | `url_field` | `string` | 是 | `"url"` | 每筆 item 內文章 URL 的欄位名（僅取當層 key，非 path） |
 | `url_template` | `string` | 否 | `"{url}"` | 用 `{url}` 佔位符組合最終 URL（`site_crawler.py:324` `format(url=raw_url)`）；空字串時改走 `urljoin(base_url, raw_url)` |
@@ -232,7 +243,7 @@ request:
 
 ### 5.4 pagination
 
-`$defs/pagination`（`config/schema/site.schema.json:236-249`）
+`pagination` 為各 `source` 的選用欄位（`$defs/pagination`）。未提供時視為不分頁（僅請求單頁）。
 
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
@@ -249,6 +260,39 @@ request:
 | `category_default` | `string` | 否 | `""` | 未指定 `--category` 時 `{category}` 的填值（`site_crawler.py:178-179`）；僅當 URL 含 `{category}` 且未傳參時生效 |
 
 名稱不在表中時保留原名並記 `warning`（`site_crawler.py:174`）。
+
+### 5.6 POST 請求本文（body / json_body）
+
+部分站點的列表 API 需要 POST 並帶請求本文。各 `source` 可設定 `body`（原始字串）或 `json_body`（JSON 物件）；`method: POST` 時由 HTTP client 送出（`src/core/http_client/curl_cffi_client.py` 以 `data=body, json=json_body` 傳遞）。
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `body` | `string` | 原始請求本文；字串內可用 `{page}` / `{keyword}` / `{category}` 佔位符 |
+| `json_body` | `object` | JSON 請求本文；**字串值**可含佔位符，若某字串值**恰為單一佔位符**（如 `"{page}"`），會以原生型別代入（`{page}` 為整數） |
+
+佔位符支援度以 `url` + `body` + `json_body` 三者合併判斷：只要任一處出現 `{keyword}` / `{category}`，該來源即被視為支援對應篩選（見 [§8.2](#82-來源選擇)）。
+
+範例（中央社 WNewsList API，`config/sites/cna.yaml`）：
+
+```yaml
+list_page:
+  method: "POST"
+  type: "json"
+  extract:
+    items_path: "ResultData.Items"
+    url_field: "PageUrl"
+    url_template: "{url}"
+  pagination:
+    enabled: true
+    start: 1
+  sources:
+    - url: "https://www.cna.com.tw/cna2018api/api/WNewsList"
+      json_body:
+        action: "0"
+        category: "{category}"   # 由 categories 對應表轉為站內值
+        pagesize: "100"
+        pageidx: "{page}"        # 整值佔位符 -> 以整數代入
+```
 
 ---
 
@@ -489,7 +533,7 @@ CLI `--keyword` / `--category` 為選用、可組合，需站點 `sources[].url`
 | `{keyword}` | `--keyword` | 有則填值，無則空字串（`site_crawler.py:181-183` `_FormatDict`） |
 | `{category}` | `--category` | 有則查 `categories` 表轉站內值（不在表則用原名並 `warning`）；無則填 `category_default`（預設空字串，`site_crawler.py:169-179`） |
 
-URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串或 `start` 補齊，不中斷流程。
+URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串或 `start` 補齊，不中斷流程。`body` / `json_body` 亦支援同一組佔位符（見 [§5.6](#56-post-請求本文body--json_body)）。
 
 ### 8.2 來源選擇
 
@@ -502,9 +546,9 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 | 僅 `--category` | 1. 含 `{category}` 且不含 `{keyword}` 的來源 → 2. 任一含 `{category}` 的來源 → 3. 預設來源 | 同上（`site_crawler.py:140-150`） |
 | 無篩選 | 預設來源（第一個不含 `{keyword}` 者，皆含時取 `sources[0]`） | - |
 
-### 8.3 繼承與填值規則
+### 8.3 填值規則
 
-* 單一來源的 `method` / `type` / `pagination` 直接覆蓋 list_page 預設；`extract` 深合併（[§5.1](#51-繼承模型)）。
+* 每個來源的 `method` / `type` / `extract` / `pagination` / `body` / `json_body` 皆為來源自有，無繼承或合併（[§5.1](#51-來源設定模型)）。
 * `{keyword}` / `{category}` / `{page}` 未命中時以空字串或 `start` 補齊，不中斷爬取，僅記 `warning`。
 * `keyword` / `category` 的解析為 `SiteCrawler` 建構期參數，`_select_list_cfg` 為純函數，`parse_list` 重算結果一致，無需依賴請求 `meta`。
 
@@ -522,10 +566,10 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 | `is not one of ['html', 'json']` | `type` / `source` / `from` 枚舉錯誤 | `type: html\|json`；`source: url\|html\|json\|keyword`；`from: json_ld\|list_data\|article_json` |
 | `is not one of ['GET', 'POST']` | `method` 大小寫錯誤 | 僅接受大寫 `GET` / `POST` |
 | `is not of type 'string'` / `minimum` / `pattern` | 型別或數值範圍不符 | `name` 非空、`base_url` 須 `^https?://`、`max_items`/`max_pages` `>=1`、`timeout` `>0`、`start` `>=1` |
-| `oneOf` / `list_extract` 失敗 | HTML 與 JSON 的 `extract` 形態混用 | 同一 `extract` 內不可同時出現 `item_selector` 與 `items_path` 等跨形態欄位 |
+| `allOf` / `list_extract_html` / `list_extract_json` 失敗 | 來源 `extract` 形態與 `type` 不一致或缺少必填欄位 | `type: html` 需 `extract.item_selector`；`type: json` 需 `extract.items_path` 與 `url_field`；不可跨形態混用 |
 | `html_field_config` 要求 `selector` / `json_field_config` 要求 `path` | `article_page.type` 與 `fields` 形態不一致 | `type: html` 時物件必含 `selector`，`type: json` 必含 `path`（`allOf if/then`） |
 | `is not of type 'array'` / `minItems` | `sources` / `rules` / `keywords` 空陣列 | `sources` / `rules` / `keywords` 至少 1 項 |
-| `required` 缺 `url` / `sources` / `type` | 必填欄位缺失 | `list_page.sources[].url`、`article_page.type`、`classifier source` 的 `source` 等 |
+| `required` 缺 `url` / `type` / `extract` / `sources` | 必填欄位缺失 | `list_page.sources[].url` / `type` / `extract`、`list_page.sources`、`article_page.type`、`classifier source` 的 `source` 等 |
 
 ### 9.2 檢查方式
 
@@ -572,34 +616,25 @@ request:
     session: "xxx"
 
 # ── list_page 選填，唯 sources 必填 (§5) ──
+# list_page 只承載 sources / categories / category_default；
+# 每個 source 自帶 type + extract（必填）與選用 method / pagination / body / json_body。
 list_page:
-  method: "GET"                          # enum GET|POST，作為 sources 繼承預設
-  type: "html"                           # enum html|json，作為 sources 繼承預設
   categories:                            # map<string,string>
     "股市": "7251"
     "政治": "6645"
   category_default: "0"                  # string
 
-  # extract 繼承預設，深合併至各 source
-  # $defs/list_extract HTML vs JSON 二選一，不可混用
-  extract:                               # HTML 範例
-    item_selector: "article.news-item"   # 必填
-    link_selector: "a"                   # 選填，預設 a
-    link_attr: "href"                    # 選填，預設 href，text 表示取文字
-  # extract:                             # JSON 範例（二選一）
-  #   items_path: "data.list"            # JSON path，必填
-  #   url_field: "url"                   # 必填
-  #   url_template: "https://example.com{url}"  # 選填，{url} 佔位符；空字串走 urljoin
-
-  pagination:                            # $defs/pagination
-    enabled: true                        # 必填 boolean
-    start: 1                             # integer >=1，預設 1
-
   sources:                               # 必填 >=1 項
     # 來源 1：預設列表（不含 {keyword}，符合 §8.2 預設來源定義）
     - url: "https://example.com/news?page={page}&cat={category}"
-      # method/type/pagination/extract 可覆蓋繼承預設
-      # extract 為 $defs/list_extract_partial 深合併，全選填
+      type: "html"                       # 必填 enum html|json
+      extract:                           # 必填，形態須與 type 一致
+        item_selector: "article.news-item"  # HTML 必填
+        link_selector: "a"               # 選填，預設 a
+        link_attr: "href"                # 選填，預設 href，text 表示取文字
+      pagination:                        # $defs/pagination
+        enabled: true                    # 必填 boolean
+        start: 1                         # integer >=1，預設 1
 
     # 來源 2：關鍵字搜尋（宣告支援 {keyword}）
     - url: "https://example.com/search?q={keyword}&page={page}"
@@ -609,17 +644,28 @@ list_page:
         link_selector: "a.title"
         link_attr: "href"
 
-    # 來源 3：JSON 列表覆蓋
+    # 來源 3：JSON 列表
     - url: "https://example.com/api/list?page={page}"
       type: "json"
-      method: "GET"
+      method: "GET"                      # 選填 enum GET|POST，預設 GET
       extract:
-        items_path: "result.articles"
-        url_field: "slug"
-        url_template: "https://example.com/article/{url}"
+        items_path: "result.articles"    # JSON 必填
+        url_field: "slug"                # 必填
+        url_template: "https://example.com/article/{url}"  # 選填，{url} 佔位符；空字串走 urljoin
       pagination:
         enabled: true
         start: 1
+
+    # 來源 4：POST JSON 列表（請求本文帶佔位符；整值佔位符以原生型別代入）
+    - url: "https://example.com/api/search"
+      type: "json"
+      method: "POST"
+      json_body:
+        category: "{category}"
+        pageidx: "{page}"
+      extract:
+        items_path: "result.items"
+        url_field: "url"
 
 # ── article_page 選填 (§6) ──
 article_page:
@@ -712,7 +758,7 @@ tags:
 | Schema 位置 | 規則 |
 |-------------|------|
 | `additionalProperties: false` 全域 | 未知欄位/拼錯立即報錯（含頂層、`request`、`pagination`、`html/json_field_config` 等） |
-| `list_page` vs `sources[].extract` | 前者 `$defs/list_extract` 含 `required`，後者 `$defs/list_extract_partial` 全選填、深合併（`src/crawler/site_crawler.py:88-98`） |
+| `list_page` self-contained | `list_page` 只允許 `sources` / `categories` / `category_default`；每個 `source` 必填 `type` + `extract`，並以 `allOf if/then` 強制 `extract` 形態與 `type` 一致（`src/crawler/site_crawler.py:_select_list_cfg`） |
 | `article_page` `allOf` | `type: html` 時物件必含 `selector`，`type: json` 必含 `path`，混用驗證失敗；`as` 僅 `text`/`datetime`，`attr` 值不再受限 |
 | `classifier_source` `oneOf` 4 型 | `source` 決定形態：`url` 需 `regex`、`html` 需 `selector`、`json` 需 `from`+`path`、`keyword` 需 `rules`；`mapping`/`split` 通用；`html` 的 `multiple`/`join` 互斥 |
 | `classifier_mapping` | `object<string,string>`，未命中保留原值（`src/crawler/classifier.py:187-193`） |

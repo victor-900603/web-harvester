@@ -35,7 +35,7 @@ class TestStartRequests:
         assert urls == ["https://example.com/news?page=1"]
 
     def test_no_pagination_yields_single_request(self, sample_site_config):
-        sample_site_config["list_page"]["pagination"]["enabled"] = False
+        sample_site_config["list_page"]["sources"][0]["pagination"]["enabled"] = False
         crawler = SiteCrawler(sample_site_config)
         urls = [r.url for r in crawler.start_requests()]
         assert urls == ["https://example.com/news?page=1"]
@@ -51,11 +51,27 @@ class TestStartRequests:
         assert req.method == "GET"
 
     def test_list_method_post_from_config(self, sample_site_config):
-        sample_site_config["list_page"]["method"] = "POST"
+        sample_site_config["list_page"]["sources"][0]["method"] = "POST"
         crawler = SiteCrawler(sample_site_config)
         reqs = list(crawler.start_requests())
         assert len(reqs) == 2
         assert all(r.method == "POST" for r in reqs)
+
+    def test_start_requests_carries_json_body(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {
+                "url": "https://example.com/api",
+                "method": "POST",
+                "type": "json",
+                "extract": {"items_path": "data", "url_field": "url"},
+                "pagination": {"enabled": True, "start": 1},
+                "json_body": {"pageidx": "{page}"},
+            },
+        ]
+        crawler = SiteCrawler(sample_site_config)
+        reqs = list(crawler.start_requests())
+        assert [r.json_body for r in reqs] == [{"pageidx": 1}, {"pageidx": 2}]
+        assert all(r.body is None for r in reqs)
 
     def test_limits_property(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
@@ -185,6 +201,68 @@ class TestBuildListUrl:
         assert crawler._build_list_url() == "https://example.com/news?page=1"
 
 
+class TestBuildListBody:
+    def test_no_body_returns_none(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        assert crawler._build_list_body() == (None, None)
+
+    def test_json_body_placeholders_substituted(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {
+                "url": "https://example.com/api",
+                "json_body": {"action": "0", "category": "{category}", "pageidx": "{page}"},
+            },
+        ]
+        sample_site_config["list_page"]["category_default"] = "aall"
+        crawler = SiteCrawler(sample_site_config)
+        body, json_body = crawler._build_list_body(page_num=2)
+        assert body is None
+        assert json_body == {"action": "0", "category": "aall", "pageidx": 2}
+        assert isinstance(json_body["pageidx"], int)
+
+    def test_json_body_category_resolved_through_mapping(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/api", "json_body": {"category": "{category}"}},
+        ]
+        sample_site_config["list_page"]["categories"] = {"政治": "aipl"}
+        crawler = SiteCrawler(sample_site_config, category="政治")
+        _, json_body = crawler._build_list_body(page_num=1)
+        assert json_body == {"category": "aipl"}
+
+    def test_json_body_nested_placeholders(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/api", "json_body": {"query": {"p": "{page}", "kw": "{keyword}"}}},
+        ]
+        crawler = SiteCrawler(sample_site_config, keyword="股市")
+        _, json_body = crawler._build_list_body(page_num=1)
+        assert json_body == {"query": {"p": 1, "kw": "股市"}}
+
+    def test_raw_body_placeholders_substituted(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/api", "body": "page={page}&cat={category}"},
+        ]
+        sample_site_config["list_page"]["category_default"] = "aall"
+        crawler = SiteCrawler(sample_site_config)
+        body, json_body = crawler._build_list_body(page_num=3)
+        assert body == "page=3&cat=aall"
+        assert json_body is None
+
+    def test_source_selected_by_body_placeholder(self, sample_site_config):
+        sample_site_config["list_page"]["sources"] = [
+            {"url": "https://example.com/news?page={page}"},
+            {
+                "url": "https://example.com/api",
+                "method": "POST",
+                "json_body": {"category": "{category}", "pageidx": "{page}"},
+            },
+        ]
+        sample_site_config["list_page"]["categories"] = {"政治": "aipl"}
+        crawler = SiteCrawler(sample_site_config, category="政治")
+        assert crawler._build_list_url(page_num=1) == "https://example.com/api"
+        _, json_body = crawler._build_list_body(page_num=1)
+        assert json_body == {"category": "aipl", "pageidx": 1}
+
+
 class TestParseList:
     def test_non_ok_list_yields_nothing(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
@@ -226,13 +304,16 @@ class TestParseList:
 
     def test_json_list_yields_requests_with_template(self, sample_site_config):
         sample_site_config["list_page"] = {
-            "type": "json",
-            "extract": {
-                "items_path": "data.articles",
-                "url_field": "slug",
-            },
             "sources": [
-                {"url": "https://example.com/api", "extract": {"url_template": "https://example.com{url}"}},
+                {
+                    "url": "https://example.com/api",
+                    "type": "json",
+                    "extract": {
+                        "items_path": "data.articles",
+                        "url_field": "slug",
+                        "url_template": "https://example.com{url}",
+                    },
+                },
             ],
         }
         crawler = SiteCrawler(sample_site_config)
@@ -245,24 +326,24 @@ class TestParseList:
         assert results[0].url == "https://example.com/a/1"
         assert results[1].url == "https://example.com/a/2"
 
-    def test_source_extract_deep_merge_with_defaults(self, sample_site_config):
+    def test_source_is_self_contained(self, sample_site_config):
         sample_site_config["list_page"] = {
-            "type": "json",
-            "extract": {
-                "items_path": "lists",
-                "url_field": "titleLink",
-            },
             "sources": [
-                {"url": "https://example.com/api?page={page}"},
                 {
-                    "url": "https://example.com/api?page={page}&q={keyword}",
-                    "extract": {"url_template": "{url}"},
+                    "url": "https://example.com/api?page={page}",
+                    "type": "json",
+                    "extract": {
+                        "items_path": "lists",
+                        "url_field": "titleLink",
+                        "url_template": "{url}",
+                    },
+                    "pagination": {"enabled": False},
                 },
             ],
         }
-        crawler = SiteCrawler(sample_site_config, keyword="股市")
+        crawler = SiteCrawler(sample_site_config)
         resp = make_response(
-            "https://example.com/api?page=1&q=股市",
+            "https://example.com/api?page=1",
             '{"lists": [{"titleLink": "https://example.com/news/1"}]}',
         )
         results = list(crawler.parse_list(resp))
