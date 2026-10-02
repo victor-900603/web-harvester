@@ -248,7 +248,7 @@ request:
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
 | `enabled` | `boolean` | 是 | - | 是否分頁；`false` 時僅請求單頁（`site_crawler.py:200-227`） |
-| `start` | `integer` `>=1` | 否 | `1` | 起始頁碼 |
+| `start` | `integer` `>=0` | 否 | `1` | 起始頁碼；0 基 API 可設 `0` |
 
 實際爬取頁數由 `limits.max_pages` 控制：`range(start, start + max_pages)`。`pagination` 不決定總頁數，僅決定起始與是否啟用。
 
@@ -634,7 +634,7 @@ list_page:
         link_attr: "href"                # 選填，預設 href，text 表示取文字
       pagination:                        # $defs/pagination
         enabled: true                    # 必填 boolean
-        start: 1                         # integer >=1，預設 1
+        start: 1                         # integer >=0，預設 1
 
     # 來源 2：關鍵字搜尋（宣告支援 {keyword}）
     - url: "https://example.com/search?q={keyword}&page={page}"
