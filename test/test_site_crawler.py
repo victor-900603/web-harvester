@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from src.core import Item, Request
@@ -273,6 +274,31 @@ class TestParseList:
         )
         results = list(crawler.parse_list(resp))
         assert results == []
+
+    def test_parse_list_logs_page_summary(self, sample_site_config, caplog):
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news?page=1",
+            "<article class='news-item'><a href='/news/1'>One</a></article>"
+            "<article class='news-item'><a href='/news/2'>Two</a></article>",
+        )
+        with caplog.at_level(logging.INFO, logger="src.crawler.site_crawler"):
+            results = list(crawler.parse_list(resp))
+        assert len(results) == 2
+        assert any(
+            "List page parsed" in rec.getMessage() and "-> 2 link(s)" in rec.getMessage()
+            for rec in caplog.records
+        )
+
+    def test_parse_list_logs_zero_links(self, sample_site_config, caplog):
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news?page=1",
+            "<div>no news here</div>",
+        )
+        with caplog.at_level(logging.INFO, logger="src.crawler.site_crawler"):
+            list(crawler.parse_list(resp))
+        assert any("-> 0 link(s)" in rec.getMessage() for rec in caplog.records)
 
     def test_html_list_yields_absolute_url_requests(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
