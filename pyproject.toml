@@ -1,0 +1,39 @@
+# 本檔案僅承載工具設定，不包含 build backend。
+# 專案以 repo 根目錄為執行路徑（python main.py），非可安裝套件。
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["src", "main"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = [".venv", "data", "logs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "main.py"]
+mypy_path = "."
+explicit_package_bases = true
+ignore_missing_imports = true
+warn_unused_ignores = true

@@ -1,0 +1,6 @@
+# 開發與 CI 專用依賴（執行期依賴見 requirements.txt）
+
+pytest>=7.0.0
+pytest-cov>=5.0.0
+ruff>=0.9.0
+mypy>=1.10.0
