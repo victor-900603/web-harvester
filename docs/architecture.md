@@ -1,0 +1,71 @@
+# 架構說明
+
+## 分層職責
+
+| 層 | 模組 | 職責 |
+|----|------|------|
+| 入口 | `main.py` | 解析 CLI、載入站點設定、建立 Settings 與 Engine |
+| 設定 | `src/utils/config.py` | 載入 YAML、JSON Schema 驗證、合併 limits 與分類對照表 |
+| 引擎 | `src/core/engine.py` | 佇列排程、重試、限制條件、儲存掛載 |
+| 請求 | `src/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援） |
+| 爬蟲 | `src/crawler/site_crawler.py` | 來源選擇、URL/body 填值、列表與文章解析 |
+| 分類 | `src/crawler/classifier.py` | 由 html / url / json / keyword 規則推導 category 與 tags |
+| 解析 | `src/parsers/` | HTML 與 JSON 的通用抽取 |
+| 儲存 | `src/storage/` | JSON 批次輸出與 SQLAlchemy 寫入 |
+
+## 請求生命週期
+
+```
+main.py
+  └─ Settings()                      # config/settings.yaml + category_normalization.yaml
+  └─ load_site_config(site)          # config/sites/<site>.yaml，Schema 驗證 fail-fast
+  └─ build_engine(settings)          # 建立 HTTP client 與 storage backend
+  └─ SiteCrawler(site_config, ...)   # 合併 limits、初始化 Classifier
+  └─ engine.run(crawler)
+       ├─ start_requests()           # 由 list_page.sources 產生第一個列表請求
+       ├─ 佇列取請求 → HTTP 取得回應 → callback 解析
+       │    ├─ 回傳 Request          # 下一頁或文章頁，入列
+       │    └─ 回傳 Item             # 去重後寫入所有 storage
+       └─ 達到 max_items / timeout / 重複即停止
+```
+
+同步模式以 `deque` 搭配單執行緒迴圈，並在每次請求間套用 `download_delay`。
+非同步模式以固定數量 worker 共用 `asyncio.Queue`，去重與停止條件透過 `stop_event` 收斂。
+
+## 來源選擇（`_select_list_cfg`）
+
+`list_page.sources` 的每個來源都是 self-contained（不繼承、不合併），依請求的關鍵字與分類挑選：
+
+| 情境 | 選擇順序 |
+|------|----------|
+| 同時指定 keyword + category | 支援兩者 → 支援 keyword（略過 category）→ 支援 category（略過 keyword）→ 預設來源 |
+| 只指定 keyword | 只含 `{keyword}` 的來源 → 任何支援 keyword 的來源 → 預設來源 |
+| 只指定 category | 只含 `{category}` 的來源 → 任何支援 category 的來源 → 預設來源 |
+| 未指定 | 第一個不含 `{keyword}` 的來源 |
+
+判定依據是來源的 `url`、`body` 與 `json_body` 串接後是否含對應佔位符。
+結果快取於 `_selected_list_cfg`，解析回應時可重新推導同一個來源，不需要額外的請求中介資料。
+
+## 去重設計
+
+三層防護，職責互不重疊：
+
+1. **請求層**（`_request_key`）：`(method, url, body, json_body)`。
+   只以 URL 去重會讓 POST offset 分頁的後續頁被誤判為重複，因此 body 與 json_body 一併納入鍵值。
+2. **寫入層**：存入前以 `url` 查詢既有資料，存在即跳過。
+3. **資料庫約束**：`url` 具 unique 約束，併發插入撞約束時捕獲 `IntegrityError` 並跳過。
+
+`limits.stop_on_duplicate` 開啟時，遇到重複請求即中止整輪爬取（適用於「最新 N 筆」情境）。
+
+## 為什麼不用瀏覽器
+
+多數新聞站點的列表與文章內容可直接從 HTML 或 JSON API 取得，主要障礙是 TLS 指紋與 header 檢查，
+而不是 JavaScript 渲染。以 `curl_cffi` 模擬瀏覽器指紋可避開大部分封鎖，同時避免瀏覽器帶來的啟動成本與記憶體開銷。
+需要 JS 渲染的站點不在支援範圍（見 README 已知限制）。
+
+## 擴充點
+
+- **新增站點**：只加 `config/sites/<name>.yaml`，同步確認 `config/schema/site.schema.json` 已涵蓋所需欄位。
+- **新增 HTTP client**：實作 `src/core/http_client/base.py` 的 `BaseHttpClient`，並在 `factory.py` 註冊。
+- **新增儲存後端**：實作 `src/storage/base.py` 的 `BaseStorage`，於 `build_engine` 掛載。
+- **新增解析格式**：在 `src/parsers/` 增加實作，並於 `SiteCrawler` 依 `type` 分派。

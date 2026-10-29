@@ -1,150 +1,194 @@
 # Web Harvester
 
-一個基於設定檔驅動的新聞爬蟲框架，支援 HTML / JSON 頁面解析、同步 / 非同步執行模式，以及多種儲存後端。
+[![CI](https://github.com/victor-900603/web-harvester/actions/workflows/ci.yml/badge.svg)](https://github.com/victor-900603/web-harvester/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/victor-900603/web-harvester)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+設定檔驅動的新聞爬蟲框架。**新增一個新聞站點只需要一份 YAML，不必改動程式碼。**
+
+站點差異（列表 API、分頁方式、selector、欄位格式）全部收斂在 `config/sites/<name>.yaml`；
+程式碼只實作通用流程：請求、重試、解析、去重、儲存。
+
+## 為什麼是這個作法
+
+- **站點差異留在設定層**：新增站點不必碰 Python，也不會出現十個 `if site == "..."` 的分支。
+- **不依賴瀏覽器**：不引入 Playwright / Selenium。預設以 `curl_cffi` 模擬瀏覽器 TLS 指紋（JA3/Akamai）通過反爬，必要時可切回 `httpx`。
+- **錯誤在啟動時就爆**：所有 YAML 以 JSON Schema 嚴格驗證（`additionalProperties: false`），打錯欄位名稱會立刻 `ConfigValidationError`，而不是安靜地爬回零筆資料。
+- **可驗證**：304 個單元測試、覆蓋率 90%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+
+## 實際執行輸出
+
+```console
+$ python main.py --site udn_news --max-items 3
+2026-10-29 16:50:43 [INFO] src.storage.database: Database engine initialized with URL: sqlite:///data/articles.db
+2026-10-29 16:50:43 [INFO] src.core.engine: Starting crawler: 聯合新聞網 in sync mode
+2026-10-29 16:50:44 [INFO] src.crawler.site_crawler: List page parsed: https://udn.com/api/more?page=1&... -> 20 link(s)
+2026-10-29 16:50:49 [INFO] src.core.engine: Reached max_items limit of 3. Stopping.
+2026-10-29 16:50:49 [INFO] src.core.engine: Total requests made: 4, total items collected: 3
+2026-10-29 16:50:49 [INFO] src.core.engine: Crawler finished: 聯合新聞網
+```
+
+單筆輸出（完整範例見 [examples/sample_output.json](examples/sample_output.json)）：
+
+```json
+{
+  "source": "聯合新聞網",
+  "url": "https://udn.com/news/story/7240/9845109",
+  "title": "台積電研發夜班計畫半年喊停 秦永沛揭40奈米挫折",
+  "published_at": "2026-10-29T16:49:00",
+  "author": "經濟日報/朱子呈",
+  "category": ["產經"],
+  "normalized_category": ["產經"],
+  "tags": ["奈米", "台積電", "研發"],
+  "crawler_at": "2026-10-29T08:50:45.972891+00:00"
+}
+```
 
 ## 功能特色
 
 - **設定檔驅動**：透過 YAML 定義爬蟲行為，無需修改程式碼即可新增目標網站
 - **雙執行模式**：支援同步（`sync`）與非同步（`async`）兩種模式
-- **TLS 指紋偽裝**：基於 `curl_cffi` 的瀏覽器指紋模擬（JA3/Akamai），支援 `chrome`/`safari`/`firefox`/`edge`  impersonate 與自訂 `ja3`/`akamai`，預設 `chrome131`，可切回 `httpx`
+- **TLS 指紋偽裝**：基於 `curl_cffi` 的瀏覽器指紋模擬（JA3/Akamai），支援 `chrome`/`safari`/`firefox`/`edge` impersonate 與自訂 `ja3`/`akamai`，預設 `chrome131`
 - **複合解析器**：可解析 HTML（BeautifulSoup）與 JSON 格式的列表頁與文章頁
 - **多種儲存後端**：JSON 檔案、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
 - **分頁爬取**：支援頁碼（`{page}`）與游標（`{cursor}`）兩種分頁模式
 - **重試機制**：可設定最大重試次數，支援指數回退與 `Retry-After`（僅重試可重試錯誤）
+- **跨站分類統一**：`category_normalization` 將各站分類對應到統一詞彙，便於跨站比對
+
+## 架構
+
+```mermaid
+flowchart LR
+    CLI["main.py<br/>CLI"] --> CFG["Settings<br/>YAML + JSON Schema"]
+    CFG --> ENGINE["CrawlerEngine<br/>sync / async"]
+    ENGINE --> HTTP["HttpClient<br/>curl_cffi / httpx"]
+    ENGINE --> CRAWLER["SiteCrawler<br/>來源選擇、分頁、欄位抽取"]
+    CRAWLER --> PARSER["Parser<br/>HTML / JSON"]
+    CRAWLER --> CLS["Classifier<br/>category / tags"]
+    ENGINE --> STORE["Storage<br/>JSON / SQLAlchemy"]
+```
+
+請求生命週期、去重鍵設計與各層職責詳見 [docs/architecture.md](docs/architecture.md)。
 
 ## 專案結構
 
 ```
 web-harvester/
 ├── main.py                  # 主程式進入點（CLI）
-├── requirements.txt
+├── requirements.txt         # 執行期依賴
+├── requirements-dev.txt     # 開發與 CI 依賴
+├── pyproject.toml           # ruff / mypy / pytest / coverage 設定
 ├── config/
 │   ├── settings.yaml       # 全域設定（引擎、日誌、儲存）
 │   ├── category_normalization.yaml  # 跨站分類統一對應表（Settings 自動合併）
 │   ├── schema/             # 設定檔驗證 JSON Schema
-│   │   ├── settings.schema.json
-│   │   └── site.schema.json
-│   └── sites/
-│       ├── example.yaml    # 範例網站設定（最小可用範本）
-│       ├── full_example.yaml  # 完整欄位範本
-│       ├── ltn.yaml        # 自由時報
-│       ├── cna.yaml        # 中央社
-│       ├── pts.yaml        # 公視新聞
-│       ├── ettoday.yaml    # ETtoday新聞雲
-│       ├── setn.yaml       # 三立新聞網
-│       ├── tvbs.yaml       # TVBS新聞網
-│       ├── nownews.yaml    # NOWnews今日新聞
-│       ├── chinatimes.yaml # 中時新聞網
-│       └── udn_news.yaml   # 聯合新聞網
-├── docs/
-│   ├── site-config.md      # 網站設定完整說明
-│   ├── global-config.md    # 全域設定完整說明
-│   ├── logging.md          # 日誌設定說明
-│   └── storage.md          # 儲存設定說明
+│   └── sites/              # 站點設定（example / full_example 與 9 個新聞站）
+├── docs/                   # site-config / global-config / logging / storage / architecture
 ├── src/
-│   ├── core/               # 核心引擎（Engine、Request、Response、Item、HttpClient）
-│   ├── crawler/            # 爬蟲邏輯（BaseCrawler、SiteCrawler）
+│   ├── core/               # 核心引擎（Engine、Request、Response、Item、HttpClient、Retry）
+│   ├── crawler/            # 爬蟲邏輯（BaseCrawler、SiteCrawler、Classifier）
 │   ├── parsers/            # 解析器（HTMLParser、JSONParser）
 │   ├── storage/            # 儲存後端（JSON、Database）
 │   └── utils/              # 工具函式（設定載入、日誌）
-├── data/
-│   └── json/               # JSON 輸出目錄
+├── examples/               # 範例輸出
 └── test/                   # 單元測試（pytest）
-    ├── conftest.py
-    ├── test_config.py
-    ├── test_core.py
-    ├── test_engine.py
-    ├── test_logging.py
-    ├── test_parsers.py
-    ├── test_site_crawler.py
-    └── test_storage.py
 ```
 
 ## 安裝
-
-### 1. 建立虛擬環境
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate      # Windows
 source .venv/bin/activate   # macOS / Linux
-```
 
-### 2. 安裝依賴套件
-
-```bash
 pip install -r requirements.txt
 ```
 
-## 測試
-
-使用 pytest（需在專案根目錄執行，路徑皆為相對根目錄）：
-
-```bash
-python -m pytest test
-```
-
-單元測試不連真實網路：engine 測試透過 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 模擬回應；storage 測試使用 pytest 的 `tmp_path` 臨時目錄。涵蓋範圍：
-
-- 設定載入與 JSON Schema 驗證（正反向）
-- Request / Response / Item 資料結構
-- HTML / JSON 解析器
-- SiteCrawler 分頁、列表與文章解析
-- 引擎 sync / async 模式的 `max_items` / `stop_on_duplicate` / `timeout` 限制
-- 可重試錯誤（HTTP 408/429/5xx、連線/逾時等傳輸錯誤）才重試，其餘 4xx 直接失敗
-- JSON 與資料庫儲存後端
-
 ## 快速開始
 
-### 列出可用站點
-
 ```bash
-python main.py --list-sites
+python main.py --list-sites          # 列出可用站點
+python main.py --site udn_news       # 執行內建範例（聯合新聞網）
 ```
 
-### 執行內建範例（聯合新聞網）
+### CLI 選項
 
-```bash
-python main.py --site udn_news
-```
+| 參數 | 說明 |
+|------|------|
+| `--site <name>` / `-s` | 指定站點 ID（對應 `config/sites/<name>.yaml`） |
+| `--list-sites` / `-l` | 列出所有站點後退出 |
+| `--keyword <kw>` / `-k` | 關鍵字搜尋（需站點設定支援 `{keyword}` 的來源） |
+| `--category <名稱>` / `-c` | 分類篩選（需站點設定 `categories`） |
+| `--max-items N` | 覆寫 `limits.max_items` |
+| `--max-pages N` | 覆寫 `limits.max_pages` |
+| `--stop-on-duplicate` / `--no-stop-on-duplicate` | 覆寫 `limits.stop_on_duplicate` |
+| `--timeout SEC` | 覆寫 `limits.timeout` |
 
-### 更換目標網站
-
-在 `config/sites/` 新增對應設定檔後，以 `--site` 指定站點 ID（設定檔名不含副檔名）：
-
-```bash
-python main.py --site your_site
-```
-
-### 關鍵字搜尋與分類篩選
-
-若站點設定提供 `list_page.sources` 與 `list_page.categories`，可搭配 `--keyword` / `--category` 使用：
+關鍵字與分類可組合使用：
 
 ```bash
 python main.py --site udn_news --keyword 台股
 python main.py --site udn_news --category 股市
-python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
+python main.py --site udn_news --keyword 台股 --category 股市
 ```
 
-`--category` 傳站內分類「名稱」，由 `categories` 對應表轉成站內實際值；名稱不在表中時改用原始名稱。分類與篩選詳見 [docs/site-config.md](docs/site-config.md)，爬取限制覆寫詳見 [docs/global-config.md](docs/global-config.md)。
+## 新增一個站點
+
+只需要新增 `config/sites/<name>.yaml`，程式碼與 CLI 都不用改：
+
+```yaml
+name: "example"
+base_url: "https://example.com"
+
+list_page:
+  sources:
+    - url: "https://example.com/news?page={page}"
+      type: "html"
+      extract:
+        item_selector: "article.news-item"
+        link_selector: "a"
+        link_attr: "href"
+      pagination:
+        enabled: true
+        start: 1
+
+article_page:
+  type: "html"
+  fields:
+    title: "h1.article-title"
+    content:
+      as: "text"
+      selector: "div.article-body"
+      attr: "text"
+    published_at:
+      as: "datetime"
+      selector: "time.publish-date"
+      attr: "datetime"
+      datetime_format: "%Y-%m-%dT%H:%M:%S"
+    author:
+      as: "text"
+      selector: "span.author-name"
+      attr: "text"
+```
+
+```bash
+python main.py --site example
+```
+
+設定不符 schema 時會在啟動階段立即失敗並指出欄位路徑。完整欄位、POST `body`/`json_body`、游標分頁、`url_filter`、分類與標籤來源請見 [docs/site-config.md](docs/site-config.md)。
 
 ## 設定說明
 
-### 全域設定（`config/settings.yaml`）
+| 文件 | 內容 |
+|------|------|
+| [docs/site-config.md](docs/site-config.md) | 站點設定全欄位、來源選擇決策、分頁、分類與標籤、常見驗證錯誤 |
+| [docs/global-config.md](docs/global-config.md) | 引擎、limits 四層優先權、HTTP client、重試 |
+| [docs/logging.md](docs/logging.md) | 日誌等級、格式、輪替 |
+| [docs/storage.md](docs/storage.md) | JSON 與資料庫儲存設定 |
+| [docs/architecture.md](docs/architecture.md) | 分層職責、請求生命週期、去重鍵設計 |
 
-完整欄位與範例請見 [docs/global-config.md](docs/global-config.md)、[docs/logging.md](docs/logging.md) 與 [docs/storage.md](docs/storage.md)。
-
-### 網站設定（`config/sites/<name>.yaml`）
-
-最小範例請見 `config/sites/example.yaml`。完整欄位、範例與選項說明請見 [docs/site-config.md](docs/site-config.md)，包含：
-
-- 頂層欄位速查與最小/完整 YAML 範例
-- `limits` / `request` / `list_page`（self-contained `sources`、`extract`、頁碼/游標 `pagination`、`categories`、POST `body` / `json_body`、JSON `url_filter`）/ `article_page`（html/json、簡寫與物件寫法，`fields` + `as`）
-- 分類與標籤（`category` / `tags` / `category_normalization`，4 種來源 `source: html|url|json|keyword` 與 `json.from` 對照）
-- 搜尋與篩選（`{page}` / `{keyword}` / `{category}` / `{cursor}` 佔位符與來源選擇決策表）
-- 驗證與除錯（常見 `ConfigValidationError` 對照）
-
-新增或修改網站設定後，可直接執行 `python main.py --site <site_id>`，若設定不符 schema 會在啟動時立即收到明確的錯誤訊息。
+`limits` 最終值採四層合併（後者覆寫、略過 None）：
+**CLI 參數 > site `limits` > settings `limits` > 程式碼預設**。
 
 ## 資料庫結構
 
@@ -164,17 +208,40 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 | `crawler_at` | DateTime | 爬取時間（UTC） |
 | `extra_data` | Text | 額外資料（JSON 格式） |
 
-去重機制：寫入前先以 `url` 查詢是否已存在（`data.url` 優先於 `item.url`），存在則跳過；`url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
+去重機制：寫入前先以 `url` 查詢是否已存在（`data.url` 優先於 `item.url`），存在則跳過；
+`url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
+列表層級另有請求去重，鍵值包含 method、URL、body 與 json_body，避免 POST 分頁被誤判為重複。
 
-## 分類與搜尋
+## 開發與測試
 
-分類（`category` / `tags`）、跨站統一（`category_normalization`）、搜尋與篩選（`{page}` / `{keyword}` / `{category}` 佔位符與來源選擇）等完整說明請見 [docs/site-config.md](docs/site-config.md)。
+```bash
+pip install -r requirements-dev.txt
 
-## 新增網站
+pytest                    # 304 passed
+pytest --cov              # 覆蓋率 90%（門檻 85%）
+ruff check src main.py test
+mypy
+```
 
-1. 在 `config/sites/` 目錄下新增 `<site_name>.yaml`，參考 [config/sites/example.yaml](config/sites/example.yaml) 填寫各欄位。
-2. 以 `--site` 指定站點 ID 執行：`python main.py --site <site_name>`。
-3. 也可先用 `python main.py --list-sites` 確認站點已註冊。
+單元測試不連真實網路：engine 測試透過 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 模擬回應；
+storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）在每次 push 與 PR 執行 lint、type check 與測試。
+
+## 與其他工具的差異
+
+| 工具 | 定位 |
+|------|------|
+| `trafilatura` | 專注單頁內文抽取，不處理多站列表、分頁與儲存流程 |
+| `news-please` | 內建站點規則為主，新增站點通常需改動程式碼或既有規則 |
+| Crawlee | 生態完整但需 Node 與瀏覽器，適合重度 JavaScript 站點 |
+| 本專案 | 多站、YAML 驅動、無瀏覽器相依，適合固定站點的新聞批次收集 |
+
+## 已知限制
+
+- 不執行 JavaScript，需要瀏覽器渲染的 SPA 站點不適用
+- 站點改版後需自行維護 selector 與列表來源
+- 單機執行，尚無分散式排程
+- 未處理登入、付費牆與驗證碼
+- 僅供技術研究；使用前請自行確認目標站點的 robots.txt 與使用條款
 
 ## 依賴套件
 
@@ -186,13 +253,16 @@ python main.py --site udn_news --keyword 台股 --category 股市   # 可組合
 | `jsonschema` | 設定檔 Schema 驗證 |
 | `SQLAlchemy` | 資料庫 ORM |
 | `colorlog` | 彩色日誌輸出 |
-| `celery` + `redis` | 非同步任務佇列（選用） |
+| `celery` + `redis` | 非同步任務佇列（目前未使用，保留備用） |
 
-## 待辦清單
+## Roadmap
 
-- [ ] 整合 Celery 以支援分散式任務處理
-- [ ] 設計與實作 Middleware 機制以增強爬蟲靈活性
+以下項目尚未實作：
+
+- 整合 Celery 以支援分散式任務處理
+- 設計與實作 Middleware 機制以增強爬蟲靈活性
+- 增量爬取排程
 
 ## 授權
 
-MIT License
+[MIT](LICENSE)
