@@ -6,14 +6,13 @@ import types
 import httpx
 import pytest
 
-from src.core import Request, Response
+from src.core import Request
 from src.core.http_client import (
     CurlCffiClient,
     HttpxClient,
-    SUPPORTED_IMPERSONATES,
     build_http_client,
 )
-from src.utils.config import DEFAULT_SETTINGS_SCHEMA, validate_config, ConfigValidationError
+from src.utils.config import DEFAULT_SETTINGS_SCHEMA, ConfigValidationError, validate_config
 
 
 class TestBuildHttpClient:
@@ -66,7 +65,6 @@ class TestBuildHttpClient:
         client = CurlCffiClient(impersonate="chrome131", ja3="x", akamai="y")
         assert client._impersonate == "chrome131"
         # warning emitted
-        import logging
 
         # caplog not automatically captured for direct instantiation without pytest caplog fixture? Use manual check
         # Instead verify attributes and that warning would be logged on construction via logger
@@ -291,7 +289,8 @@ class TestCurlCffiClient:
             def request(self, **kwargs):
                 return FakeResp()
 
-        import sys, types
+        import sys
+        import types
 
         fake_crequests = types.ModuleType("curl_cffi.requests")
         fake_crequests.Session = FakeSession
@@ -326,7 +325,8 @@ class TestCurlCffiClient:
             async def request(self, **kwargs):
                 return FakeResp()
 
-        import sys, types
+        import sys
+        import types
 
         fake_async_mod = types.ModuleType("curl_cffi.requests")
         fake_async_mod.AsyncSession = FakeAsyncSession

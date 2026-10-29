@@ -1,10 +1,9 @@
 import argparse
 import sys
 
-from src.utils import Settings, get_all_site_ids, load_site_config, setup_logging
-
 from src.core import build_engine
 from src.crawler import SiteCrawler
+from src.utils import Settings, get_all_site_ids, load_site_config, setup_logging
 
 
 def _positive_int(value: str) -> int:
@@ -122,8 +121,6 @@ def main(argv: list | None = None) -> int:
         site_config = load_site_config(args.site)
     except FileNotFoundError:
         parser.error(f"site '{args.site}' not found")
-    except Exception:
-        raise
 
     settings = Settings()
     setup_logging(

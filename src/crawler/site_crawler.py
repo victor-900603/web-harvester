@@ -4,13 +4,14 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Generator, Union, Any, Dict, Optional
+from typing import Any, Dict, Generator, Optional, Union
 from urllib.parse import urljoin
 
-from ..core import Item, Request, Response
+from ..core.item import Item
+from ..core.request import Request
+from ..core.response import Response
 from ..parsers import HTMLParser, JSONParser
 from ..utils.config import merge_limits
-
 from .base import BaseCrawler
 from .classifier import Classifier
 
@@ -309,18 +310,18 @@ class SiteCrawler(BaseCrawler):
                 json_body=json_body,
                 callback="parse_list",
             )
-    
+
     def parse(self, response: Response) -> Generator[Union[Request, Item], None, None]:
         """Parse the response and yield items or new requests.
-        
+
         Args:
             response (Response): The HTTP response to parse.
-            
+
         Yields:
             Union[Request, Item]: New requests to follow or items to collect.
         """
         yield from self.parse_list(response)
-        
+
     def parse_list(self, response: Response) -> Generator[Union[Request, Item], None, None]:
         """Parse a list page and yield article requests or items."""
         if not response.ok:
@@ -332,7 +333,7 @@ class SiteCrawler(BaseCrawler):
         extract = cfg.get("extract", {})
         headers = self._request_cfg.get("headers", {})
         cookies = self._request_cfg.get("cookies", {})
-        
+
         if list_type == "json":
             results = self._parse_json_list(response, extract, headers, cookies)
         else:
@@ -393,39 +394,39 @@ class SiteCrawler(BaseCrawler):
             callback="parse_list",
             meta={"page": next_page, "cursor": next_cursor},
         )
-            
+
     def _parse_html_list(
-        self, 
-        response: Response, 
-        extract: Dict[str, Any], 
-        headers: dict, 
+        self,
+        response: Response,
+        extract: Dict[str, Any],
+        headers: dict,
         cookies: dict
     ) -> Generator[Union[Request, Item], None, None]:
         """Parse an HTML list page and yield article requests or items."""
-        
+
         parser = HTMLParser(response.text)
-        
+
         items_selector = extract.get("item_selector", "a")
         link_selector = extract.get("link_selector", "a")
         link_attr = extract.get("link_attr", "href")
-        
+
         for item_elem in parser.select(items_selector):
             link_elem = item_elem.select_one(link_selector) if link_selector != items_selector else item_elem
             if not link_elem:
                 continue
-            
+
             href = link_elem.get(link_attr, "") if link_attr != "text" else link_elem.get_text(strip=True)
             if not href:
                 continue
-            
+
             url = urljoin(self.base_url, href)
-            
+
             if self._article_cfg:
                 yield Request(
-                    url=url, 
-                    headers=headers, 
-                    cookies=cookies, 
-                    callback="parse_article", 
+                    url=url,
+                    headers=headers,
+                    cookies=cookies,
+                    callback="parse_article",
                     meta={"list_url": response.url}
                 )
             else:
@@ -435,7 +436,7 @@ class SiteCrawler(BaseCrawler):
                     url=url,
                     item_type="link",
                 )
-                
+
     def _parse_json_list(
         self,
         response: Response,
@@ -462,7 +463,7 @@ class SiteCrawler(BaseCrawler):
             if not raw_url:
                 logger.warning(f"URL field '{url_field}' not found in item data: {item_data}")
                 continue
-            
+
             if url_template:
                 url = url_template.format(url=raw_url)
             else:
@@ -485,7 +486,7 @@ class SiteCrawler(BaseCrawler):
                     source=self.name,
                     url=url,
                 )
-                
+
     def parse_article(
         self, response: Response
     ) -> Generator[Union[Item, Request], None, None]:
@@ -518,7 +519,7 @@ class SiteCrawler(BaseCrawler):
             url=response.url,
             item_type="article",
         )
-        
+
 
     def _extract_article_html(
         self, response: Response, fields: Dict[str, Any]
@@ -537,7 +538,7 @@ class SiteCrawler(BaseCrawler):
                     continue
                 attr = field_cfg.get("attr", "text")
                 value = parser.extract(selector, attr)
-                
+
                 value = self._extract_field(value, field_cfg)
             else:
                 continue
@@ -560,7 +561,7 @@ class SiteCrawler(BaseCrawler):
             elif isinstance(field_cfg, dict):
                 path = field_cfg.get("path", "")
                 value = parser.extract_path(path)
-                
+
                 value = self._extract_field(value, field_cfg)
             else:
                 continue
@@ -569,21 +570,21 @@ class SiteCrawler(BaseCrawler):
                 data[field_name] = value
 
         return data
-        
-    def _extract_field(self, value: str, field_cfg: Union[str, Dict[str, Any]]) -> Any:
+
+    def _extract_field(self, value: Optional[str], field_cfg: Union[str, Dict[str, Any]]) -> Any:
         """Extract a field value based on the configuration."""
         if value is None:
             return None
         try:
             if isinstance(field_cfg, dict):
                 field_as = field_cfg.get("as")
-                
+
                 if field_as == "datetime":
                     date_format = field_cfg.get("datetime_format")
                     if date_format:
                         return datetime.strptime(value, date_format)
                     else:
-                        return datetime.fromisoformat(value)            
+                        return datetime.fromisoformat(value)
                 elif field_as == "text":
                     regex = field_cfg.get("regex")
                     if regex:
@@ -597,7 +598,7 @@ class SiteCrawler(BaseCrawler):
                         match = re.search(regex, value)
                         value = "/".join(match.groups()) if match else value
                     return value
-                
+
             return value
         except Exception as e:
             logger.warning(f"Failed to extract field with value '{value}' and config '{field_cfg}': {e}")

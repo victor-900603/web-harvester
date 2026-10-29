@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from conftest import make_response
+
 from src.core import Item, Request
 from src.crawler.classifier import Classifier
-from conftest import make_response
 
 HTML = """
 <html>

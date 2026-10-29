@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import httpx
 
-from .base import BaseHttpClient
 from ..request import Request
 from ..response import Response
+from .base import BaseHttpClient
 
 
 class HttpxClient(BaseHttpClient):

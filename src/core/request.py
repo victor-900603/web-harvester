@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+
 @dataclass
 class Request:
     """HTTP request object.
@@ -19,7 +20,7 @@ class Request:
         callback: The name of the callback function to call with the response.
         errback: The name of the error callback function to call if the request fails.
     """
-    
+
     url: str
     method: str = "GET"
     headers: Dict[str, str] = field(default_factory=dict)
@@ -30,7 +31,7 @@ class Request:
     meta: Dict[str, Any] = field(default_factory=dict)
     callback: Optional[str] = None
     errback: Optional[str] = None
-    
+
     def copy(self) -> Request:
         return Request(
             url=self.url,
@@ -44,6 +45,6 @@ class Request:
             callback=self.callback,
             errback=self.errback
         )
-        
+
     def __repr__(self):
         return f"<Request method={self.method} url={self.url}>"

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from src.utils.config import (
-    ConfigValidationError,
     DEFAULT_SITE_SCHEMA,
+    ConfigValidationError,
     Settings,
     load_site_config,
     merge_limits,

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Union, List
 import json
+from typing import Any, Dict, List, Optional
+
 
 class JSONParser:
     """A JSON parser that can handle both JSON strings and already parsed JSON data.
-    
+
     Args:
         content (str | Dict[str, Any] | List[Any]): The JSON content to parse, either as a string or as a pre-parsed dictionary/list.
-        
+
     Example:
         json_string = '{"name": "Alice", "age": 30, "hobbies": ["reading", "hiking"]}'
         parser = JSONParser(json_string)
@@ -19,13 +20,13 @@ class JSONParser:
             self.data = json.loads(content.lstrip("\ufeff"))
         else:
             self.data = content
-            
+
     def extract_path(self, path: str) -> Optional[Any]:
         """Extract a value from the JSON data using a dot-separated path.
-        
+
         Args:
             path (str): The dot-separated path to the desired value (e.g., "user.name" or "items.0.title").
-            
+
         Returns:
             Optional[Any]: The extracted value, or None if the path does not exist.
         """

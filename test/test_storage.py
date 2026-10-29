@@ -3,15 +3,13 @@ from __future__ import annotations
 import json as json_lib
 from datetime import datetime, timezone
 
-import pytest
-from sqlalchemy.exc import IntegrityError
-
-from src.storage.json_storage import JSONStorage
-from src.storage.db_storage import DatabaseStorage
-from src.storage.database import get_session, close_database
-from src.storage.models import Article
-from src.core import Item
 from conftest import make_item
+
+from src.core import Item
+from src.storage.database import close_database, get_session
+from src.storage.db_storage import DatabaseStorage
+from src.storage.json_storage import JSONStorage
+from src.storage.models import Article
 
 
 class TestJSONStorage:

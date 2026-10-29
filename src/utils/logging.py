@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-from typing import Optional
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from typing import Optional
+
 from colorlog import ColoredFormatter
 
 
 def setup_logging(
-    level: str = "INFO", 
+    level: str = "INFO",
     log_format: Optional[str] = None,
     log_file: Optional[str] = None,
     max_bytes: int = 10 * 1024 * 1024,  # 10 MB
     backup_count: int = 5,
     ) -> None:
     """Set up logging configuration for the crawler.
-    
+
     Args:
         level (str): The logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
         log_format (str): The format for log messages.
@@ -23,11 +24,11 @@ def setup_logging(
         max_bytes (int): The maximum size of the log file before it gets rotated.
         backup_count (int): The number of backup log files to keep.
     """
-    
+
     if log_format is None:
         log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     color_log_format = "%(log_color)s" + log_format
-        
+
     level_no = getattr(logging, level.upper())
     main_logger = logging.getLogger()
     main_logger.setLevel(level_no)
@@ -49,14 +50,14 @@ def setup_logging(
     )
     console_handler.setFormatter(console_formatter)
     main_logger.addHandler(console_handler)
-    
+
     if log_file:
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=max_bytes, 
-            backupCount=backup_count, 
-            encoding='utf-8', 
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8',
         )
         file_handler.setLevel(level_no)
         file_handler.setFormatter(logging.Formatter(log_format))

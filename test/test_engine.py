@@ -196,7 +196,6 @@ class TestSyncLimits:
     def test_fetch_sync_sets_body_for_json(self, monkeypatch):
         # Engine now delegates to http_client; test via httpx path explicitly
         from src.core.http_client import HttpxClient
-        from src.core import Response as CoreResponse
 
         class FakeResponse:
             status_code = 200

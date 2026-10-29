@@ -5,9 +5,9 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from .base import BaseHttpClient
 from ..request import Request
 from ..response import Response
+from .base import BaseHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class CurlCffiClient(BaseHttpClient):
         try:
             if isinstance(cookies, dict):
                 return dict(cookies)
-            return {k: v for k, v in cookies.items()}  # type: ignore[union-attr]
+            return {k: v for k, v in cookies.items()}
         except Exception:
             return {}
 

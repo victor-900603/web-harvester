@@ -5,18 +5,15 @@ import json
 import logging
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import httpx
-
+from ..storage import BaseStorage, DatabaseStorage, JSONStorage
+from ..utils.config import Settings
 from .http_client import BaseHttpClient, build_http_client
+from .item import Item
 from .request import Request
 from .response import Response
-from .item import Item
 from .retry import BackoffPolicy, is_retryable
-
-from ..storage import BaseStorage, JSONStorage, DatabaseStorage
-from ..utils.config import Settings
 
 if TYPE_CHECKING:
     from ..crawler import BaseCrawler
@@ -38,15 +35,15 @@ def _request_key(request: Request) -> tuple:
 
 class CrawlerEngine:
     """The core engine that runs the crawling process."""
-    def __init__(self, settings: Dict[str, Any]):
+    def __init__(self, settings: Dict[str, Any] | Settings):
         """Initialize the crawler engine with the given settings.
-        
+
         Args:
             settings (Dict[str, Any]): A dictionary of engine configuration settings.
         """
         self.settings = settings or Settings()
         self.storages: List[BaseStorage] = []
-        
+
         # engine configuration
         engine_cfg = self.settings.get("engine", {})
         self._mode = engine_cfg.get("mode", "sync")
@@ -63,26 +60,26 @@ class CrawlerEngine:
 
         # HTTP client with TLS fingerprint support (curl_cffi by default)
         self._http_client: BaseHttpClient = build_http_client(self.settings)
-        
+
     def add_storage(self, storage: BaseStorage) -> CrawlerEngine:
         """Add a storage backend to the engine.
-        
+
         Args:
             storage (BaseStorage): An instance of a storage backend to add.
-            
+
         Returns:
             CrawlerEngine: The engine instance (for chaining).
         """
         self.storages.append(storage)
         logger.debug(f"Added storage backend: {storage.__class__.__name__}")
         return self
-        
+
     def run(self, crawler: BaseCrawler) -> List[Item]:
         """Run the crawler and return the collected items.
-        
+
         Args:
             crawler (BaseCrawler): An instance of a crawler to run.
-            
+
         Returns:
             List[Item]: A list of collected items.
         """
@@ -102,7 +99,7 @@ class CrawlerEngine:
         finally:
             self.close()
             logger.info(f"Crawler finished: {crawler.name}")
-            
+
     def _run_sync(
         self,
         crawler: BaseCrawler,
@@ -150,19 +147,19 @@ class CrawlerEngine:
                 continue
 
             seen.add(key)
-            
+
             response = self._process_sync(request)
             if response is None:
                 continue
-            
+
             total_requests += 1
-            
+
             callback_name = request.callback or "parse"
             callback = getattr(crawler, callback_name, None)
             if callback is None:
                 logger.warning(f"No callback method '{callback_name}' found in crawler '{crawler.name}'")
                 continue
-            
+
             for result in callback(response):
                 if isinstance(result, Request):
                     queue.append(result)
@@ -171,18 +168,16 @@ class CrawlerEngine:
                     self._store(result)
                 else:
                     logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
-                    
+
             if self._download_delay > 0:
                 time.sleep(self._download_delay)
-        
-        logger.info(f"Successfully processed {total_requests} requests.")
-        logger.info(f"Total requests made: {total_requests}")
-        logger.info(f"Total items collected: {len(items)}")
+
+        logger.info(f"Total requests made: {total_requests}, total items collected: {len(items)}")
         return items
-        
+
     def _process_sync(self, request: Request) -> Optional[Response]:
         """Process a single request in synchronous mode with retries.
-        
+
         Args:
             request (Request): The request to process.
 
@@ -207,7 +202,7 @@ class CrawlerEngine:
 
         logger.error(f"Failed to process request after {self._max_retries} attempts: {request.url}")
         return None
-    
+
     def _fetch_sync(self, request: Request) -> Optional[Response]:
         """Fetch a single request in synchronous mode and return the response.
 
@@ -231,7 +226,6 @@ class CrawlerEngine:
         items: List[Item] = []
         queue: asyncio.Queue[Request] = asyncio.Queue()
         seen: set = set()
-        semaphore = asyncio.Semaphore(self._max_concurrency)
 
         for req in crawler.start_requests():
             await queue.put(req)
@@ -308,11 +302,9 @@ class CrawlerEngine:
         for w in workers:
             w.cancel()
 
-        logger.info(f"Successfully processed {total_requests} requests.")
-        logger.info(f"Total requests made: {total_requests}")
-        logger.info(f"Total items collected: {len(items)}")
+        logger.info(f"Total requests made: {total_requests}, total items collected: {len(items)}")
         return items
-    
+
     async def _process_async(self, request: Request) -> Optional[Response]:
         """Process async request with retries."""
         for attempt in range(1, self._max_retries + 1):
@@ -337,45 +329,45 @@ class CrawlerEngine:
     async def _fetch_async(self, request: Request) -> Optional[Response]:
         """Fetch async request via the configured HTTP client."""
         return await self._http_client.fetch_async(request)
-  
+
     def _store(self, item: Item) -> None:
         """Save an item using all configured storage backends."""
         for storage in self.storages:
             try:
                 storage.save(item)
             except Exception as e:
-                logger.error(f"Failed to save item with {storage.__class__.__name__}: {e}")
+                logger.error(f"Failed to save item with {storage.__class__.__name__}: {e}", exc_info=True)
 
     async def _store_async(self, item: Item) -> None:
         """Save an item asynchronously by running the synchronous _store in a thread pool,
         so the event loop is not blocked by I/O-bound storage operations."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._store, item)
-            
+
     def close(self) -> None:
         """Close any resources used by the engine, such as storage backends."""
         for storage in self.storages:
             try:
                 storage.close()
             except Exception as e:
-                pass
+                logger.debug(f"Failed to close {storage.__class__.__name__}: {e}", exc_info=True)
         try:
             self._http_client.close()
-        except Exception:
-            pass
-            
+        except Exception as e:
+            logger.debug(f"Failed to close HTTP client: {e}", exc_info=True)
+
         logger.info("Crawler engine resources have been cleaned up.")
 
 def build_engine(settings: Settings) -> CrawlerEngine:
     engine = CrawlerEngine(settings)
-    
+
     # Storage
     json_cfg = settings.get("json_storage", {})
     if json_cfg.get("enabled", False):
         engine.add_storage(JSONStorage(
             output_dir=json_cfg.get("output_dir", "data/json"),
         ))
-        
+
     db_cfg = settings.get("database", {})
     if db_cfg.get("enabled", False):
         engine.add_storage(DatabaseStorage(

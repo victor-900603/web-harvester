@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from conftest import make_response
+
 from src.core import Item, Request, Response
 from src.crawler import SiteCrawler
-from conftest import make_response
 
 
 class TestStartRequests:

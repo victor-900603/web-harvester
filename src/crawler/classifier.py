@@ -154,8 +154,8 @@ class Classifier:
                 return JSONParser(list_data).extract_path(path)
             return list_data
         elif from_ == "article_json":
-            parser = JSONParser(response.text)
-            return parser.extract_path(path) if path else parser.data
+            json_parser = JSONParser(response.text)
+            return json_parser.extract_path(path) if path else json_parser.data
         else:
             logger.warning(f"Unknown json source 'from': {from_}")
             return None

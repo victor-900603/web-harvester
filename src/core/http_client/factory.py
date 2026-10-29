@@ -15,7 +15,7 @@ def _settings_get(settings: Any, key: str, default: Any = None) -> Any:
     """Dot-aware get that works for both Settings and plain dict."""
     if hasattr(settings, "get"):
         try:
-            result = settings.get(key, default)  # type: ignore[call-arg]
+            result = settings.get(key, default)
             # Settings.get already handles dot-notation; plain dict needs fallback.
             if not isinstance(settings, dict) or "." not in key or result is not default:
                 return result
@@ -40,7 +40,8 @@ def build_http_client(settings: Any) -> BaseHttpClient:
     Falls back to HttpxClient if curl_cffi is unavailable and http_client is curl_cffi
     (with a warning) to avoid hard crash on environments without the wheel.
     """
-    get = lambda k, d=None: _settings_get(settings, k, d)
+    def get(key: str, default: Any = None) -> Any:
+        return _settings_get(settings, key, default)
 
     http_client_name = get("request.http_client", "curl_cffi") or "curl_cffi"
     timeout = get("request.timeout", None)
