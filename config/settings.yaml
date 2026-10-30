@@ -10,7 +10,7 @@ engine:
   mode: "sync"                # sync | async
   max_concurrency: 10         # Maximum number of concurrent requests
   request_timeout: 30         # Request timeout in seconds
-  download_delay: 1.0         # Delay between requests to the same domain in seconds
+  download_delay: 1.0         # Minimum interval between requests to the same domain in seconds (0 disables)
   max_retries: 3              # Maximum number of attempts for failed requests (retryable errors only)
   # Exponential backoff between retries. Only retryable failures are retried
   # (HTTP 408/429/5xx, timeouts and network errors); other 4xx fail fast.

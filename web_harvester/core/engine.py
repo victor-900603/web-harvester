@@ -1,16 +1,18 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import time
 from collections import deque
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..storage import BaseStorage, DatabaseStorage, JSONStorage
 from ..utils.config import Settings
 from .http_client import BaseHttpClient, build_http_client
 from .item import Item
+from .rate_limit import DomainRateLimiter
 from .request import Request
 from .response import Response
 from .retry import BackoffPolicy, is_retryable
@@ -20,6 +22,10 @@ if TYPE_CHECKING:
     from ..crawler import BaseCrawler
 
 logger = logging.getLogger(__name__)
+
+
+class CrawlStopped(RuntimeError):
+    """Raised internally when collection stopped before the request was sent."""
 
 
 def _request_key(request: Request) -> tuple:
@@ -72,6 +78,7 @@ class CrawlerEngine:
 
         # HTTP client with TLS fingerprint support (curl_cffi by default)
         self._http_client: BaseHttpClient = build_http_client(self.settings)
+        self._rate_limiter = DomainRateLimiter(self._download_delay)
 
         # robots.txt enforcement and cross-run deduplication
         self._skip_seen_urls = (
@@ -86,6 +93,11 @@ class CrawlerEngine:
         # dry run: crawl lists, never fetch article pages
         self._dry_run = dry_run
         self._skipped_articles = 0
+
+        # absolute monotonic deadline of the current run (None disables it)
+        self._deadline: Optional[float] = None
+        # set when max_items is reached so queued requests are dropped unsent
+        self._stop_fetching = False
 
     def add_storage(self, storage: BaseStorage) -> CrawlerEngine:
         """Add a storage backend to the engine.
@@ -113,6 +125,7 @@ class CrawlerEngine:
         self._skipped_known = 0
         self._skipped_robots = 0
         self._skipped_articles = 0
+        self._stop_fetching = False
         self._robots_enabled = self._resolve_respect_robots(crawler)
         self._known_urls = self._load_known_urls() if self._skip_seen_urls else set()
         try:
@@ -122,7 +135,12 @@ class CrawlerEngine:
             timeout = limits.get("timeout")
 
             if self._mode == "async":
-                return asyncio.run(self._run_async(crawler, max_items=max_items, stop_on_duplicate=stop_on_duplicate, timeout=timeout))
+                return asyncio.run(self._run_async_safely(
+                    crawler,
+                    max_items=max_items,
+                    stop_on_duplicate=stop_on_duplicate,
+                    timeout=timeout,
+                ))
             elif self._mode == "sync":
                 return self._run_sync(crawler, max_items=max_items, stop_on_duplicate=stop_on_duplicate, timeout=timeout)
             else:
@@ -203,14 +221,15 @@ class CrawlerEngine:
             queue.append(req)
 
         total_requests = 0
-        start_time = time.time()
+        start_time = time.monotonic()
+        self._deadline = start_time + timeout if timeout is not None else None
 
         while queue:
             if max_items is not None and len(items) >= max_items:
                 logger.info(f"Reached max_items limit of {max_items}. Stopping.")
                 break
 
-            if timeout is not None and (time.time() - start_time) > timeout:
+            if self._budget_exhausted():
                 logger.warning(f"Crawl timeout of {timeout}s reached. Stopping.")
                 break
 
@@ -262,9 +281,6 @@ class CrawlerEngine:
                 else:
                     logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
 
-            if self._download_delay > 0:
-                time.sleep(self._download_delay)
-
         self._log_summary(total_requests, len(items))
         return items
 
@@ -293,6 +309,34 @@ class CrawlerEngine:
         """Number of article pages skipped by a dry run."""
         return self._skipped_articles
 
+    def _remaining_budget(self) -> Optional[float]:
+        """Seconds left before the crawl deadline, or None when unbounded."""
+        if self._deadline is None:
+            return None
+        return self._deadline - time.monotonic()
+
+    def _budget_exhausted(self) -> bool:
+        """Return whether the overall crawl timeout has been used up."""
+        remaining = self._remaining_budget()
+        return remaining is not None and remaining <= 0
+
+    def _should_abort(self) -> bool:
+        """Return whether queued requests should be dropped instead of fetched."""
+        return self._stop_fetching or self._budget_exhausted()
+
+    def _capped_request(self, request: Request) -> Optional[Request]:
+        """Return ``request`` with its timeout capped by the remaining budget.
+
+        Returns None when the budget is already exhausted, which lets callers
+        stop without sending a request that could outlive the crawl timeout.
+        """
+        remaining = self._remaining_budget()
+        if remaining is None:
+            return request
+        if remaining <= 0:
+            return None
+        return replace(request, timeout=min(self._request_timeout, remaining))
+
     def _process_sync(self, request: Request) -> Optional[Response]:
         """Process a single request in synchronous mode with retries.
 
@@ -303,8 +347,15 @@ class CrawlerEngine:
             Optional[Response]: The response object if the request was successful, or None if it failed after retries.
         """
         for attempt in range(1, self._max_retries + 1):
+            budgeted = self._capped_request(request)
+            if budgeted is None:
+                logger.warning(f"Crawl timeout budget exhausted before fetching {request.url}")
+                return None
             try:
-                return self._fetch_sync(request)
+                return self._fetch_sync(budgeted)
+            except CrawlStopped:
+                logger.debug(f"Collection stopped; dropped queued request {request.url}")
+                return None
             except Exception as e:
                 if not is_retryable(e):
                     logger.error(f"Non-retryable error for {request.url}: {e}")
@@ -332,7 +383,32 @@ class CrawlerEngine:
         Returns:
             Optional[Response]: The response object if the request was successful, or None if it failed.
         """
+        self._rate_limiter.wait(request.url, should_stop=self._should_abort)
+        if self._stop_fetching:
+            raise CrawlStopped(request.url)
         return self._http_client.fetch_sync(request)
+
+    async def _run_async_safely(
+        self,
+        crawler: BaseCrawler,
+        max_items: Optional[int] = None,
+        stop_on_duplicate: bool = False,
+        timeout: Optional[float] = None,
+    ) -> List[Item]:
+        """Run the async loop and always release async HTTP resources.
+
+        The async HTTP client must be closed inside the event loop, so cleanup
+        cannot live in :meth:`close`.
+        """
+        try:
+            return await self._run_async(
+                crawler,
+                max_items=max_items,
+                stop_on_duplicate=stop_on_duplicate,
+                timeout=timeout,
+            )
+        finally:
+            await self._http_client.aclose()
 
     async def _run_async(
         self,
@@ -349,7 +425,8 @@ class CrawlerEngine:
             await queue.put(req)
 
         total_requests = 0
-        start_time = time.time()
+        start_time = time.monotonic()
+        self._deadline = start_time + timeout if timeout is not None else None
         stop_event = asyncio.Event()
 
         async def drain() -> None:
@@ -395,10 +472,20 @@ class CrawlerEngine:
                         logger.debug(f"Dry run: not fetching article page {request.url}")
                         continue
 
+                    if max_items is not None and len(items) >= max_items:
+                        logger.info(f"Reached max_items limit of {max_items}. Stopping.")
+                        stop_event.set()
+                        continue
+
+                    if self._budget_exhausted():
+                        logger.warning(f"Crawl timeout of {timeout}s reached. Stopping.")
+                        stop_event.set()
+                        continue
+
                     if not await self._robots_allows_async(request.url):
                         continue
 
-                    response = await self._process_async(request)
+                    response = await self._process_async_with_budget(request)
 
                     if response is None:
                         continue
@@ -419,16 +506,14 @@ class CrawlerEngine:
                             await self._store_async(result)
                             if max_items is not None and len(items) >= max_items:
                                 logger.info(f"Reached max_items limit of {max_items}. Stopping.")
+                                self._stop_fetching = True
                                 stop_event.set()
                         else:
                             logger.warning(f"Unexpected result type: {type(result)} from callback '{callback_name}'")
 
-                    if timeout is not None and (time.time() - start_time) > timeout:
+                    if self._budget_exhausted():
                         logger.warning(f"Crawl timeout of {timeout}s reached. Stopping.")
                         stop_event.set()
-
-                    if self._download_delay > 0:
-                        await asyncio.sleep(self._download_delay)
 
                 finally:
                     queue.task_done()
@@ -441,11 +526,39 @@ class CrawlerEngine:
         self._log_summary(total_requests, len(items))
         return items
 
+    async def _process_async_with_budget(self, request: Request) -> Optional[Response]:
+        """Run the retrying async fetch bounded by the remaining crawl budget.
+
+        ``asyncio.wait_for`` cancels the in-flight task once the budget is gone,
+        which is what makes the async timeout a hard limit rather than a check
+        performed after the request returns.
+        """
+        remaining = self._remaining_budget()
+        if remaining is None:
+            return await self._process_async(request)
+        if remaining <= 0:
+            logger.warning(f"Crawl timeout budget exhausted before fetching {request.url}")
+            return None
+
+        try:
+            return await asyncio.wait_for(self._process_async(request), timeout=remaining)
+        except asyncio.TimeoutError:
+            logger.warning(f"Crawl timeout reached while fetching {request.url}")
+            self._deadline = time.monotonic()
+            return None
+
     async def _process_async(self, request: Request) -> Optional[Response]:
         """Process async request with retries."""
         for attempt in range(1, self._max_retries + 1):
+            budgeted = self._capped_request(request)
+            if budgeted is None:
+                logger.warning(f"Crawl timeout budget exhausted before fetching {request.url}")
+                return None
             try:
-                return await self._fetch_async(request)
+                return await self._fetch_async(budgeted)
+            except CrawlStopped:
+                logger.debug(f"Collection stopped; dropped queued request {request.url}")
+                return None
             except Exception as e:
                 if not is_retryable(e):
                     logger.error(f"Non-retryable error for {request.url}: {e}")
@@ -464,6 +577,9 @@ class CrawlerEngine:
 
     async def _fetch_async(self, request: Request) -> Optional[Response]:
         """Fetch async request via the configured HTTP client."""
+        await self._rate_limiter.wait_async(request.url, should_stop=self._should_abort)
+        if self._stop_fetching:
+            raise CrawlStopped(request.url)
         return await self._http_client.fetch_async(request)
 
     def _store(self, item: Item) -> None:

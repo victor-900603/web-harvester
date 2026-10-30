@@ -358,3 +358,149 @@ class TestCurlCffiClient:
         assert kwargs["impersonate"] == "chrome131"
         assert "ja3" not in kwargs
         assert "headers" not in kwargs
+
+class TestSessionReuse:
+    @staticmethod
+    def _install_curl_cffi(monkeypatch, session_cls, async_session_cls):
+        import sys
+
+        fake_requests = types.ModuleType("curl_cffi.requests")
+        fake_requests.Session = session_cls
+        fake_requests.AsyncSession = async_session_cls
+        fake_package = types.ModuleType("curl_cffi")
+        fake_package.requests = fake_requests
+        monkeypatch.setitem(sys.modules, "curl_cffi", fake_package)
+        monkeypatch.setitem(sys.modules, "curl_cffi.requests", fake_requests)
+
+    def test_curl_cffi_sync_session_is_reused_and_closed(self, monkeypatch):
+        created = {"opened": 0, "closed": 0}
+
+        class FakeResp:
+            status_code = 200
+            headers = {}
+            cookies = {}
+            text = "ok"
+            content = b"ok"
+            encoding = "utf-8"
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                created["opened"] += 1
+
+            def request(self, **kwargs):
+                return FakeResp()
+
+            def close(self):
+                created["closed"] += 1
+
+        self._install_curl_cffi(monkeypatch, FakeSession, object)
+        client = CurlCffiClient(impersonate="chrome131")
+
+        client.fetch_sync(Request(url="https://e.com/a"))
+        client.fetch_sync(Request(url="https://e.com/b"))
+        assert created == {"opened": 1, "closed": 0}
+
+        client.close()
+        assert created == {"opened": 1, "closed": 1}
+
+        client.fetch_sync(Request(url="https://e.com/c"))
+        assert created["opened"] == 2
+
+    def test_curl_cffi_async_session_is_reused_and_closed(self, monkeypatch):
+        created = {"opened": 0, "closed": 0}
+
+        class FakeResp:
+            status_code = 200
+            headers = {}
+            cookies = {}
+            text = "ok"
+            content = b"ok"
+            encoding = "utf-8"
+
+        class FakeAsyncSession:
+            def __init__(self, **kwargs):
+                created["opened"] += 1
+
+            async def request(self, **kwargs):
+                return FakeResp()
+
+            async def close(self):
+                created["closed"] += 1
+
+        self._install_curl_cffi(monkeypatch, object, FakeAsyncSession)
+        client = CurlCffiClient(impersonate="chrome131")
+
+        async def run():
+            await client.fetch_async(Request(url="https://e.com/a"))
+            await client.fetch_async(Request(url="https://e.com/b"))
+            assert created == {"opened": 1, "closed": 0}
+            await client.aclose()
+
+        asyncio.run(run())
+        assert created == {"opened": 1, "closed": 1}
+
+    def test_httpx_client_is_reused_and_closed(self, monkeypatch):
+        created = {"opened": 0, "closed": 0}
+
+        class FakeResp:
+            status_code = 200
+            encoding = "utf-8"
+            content = b"ok"
+            text = "ok"
+            headers = {}
+            cookies = {}
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                created["opened"] += 1
+
+            def request(self, **kwargs):
+                return FakeResp()
+
+            def close(self):
+                created["closed"] += 1
+
+        monkeypatch.setattr(httpx, "Client", FakeClient)
+        client = HttpxClient()
+
+        client.fetch_sync(Request(url="https://e.com/a"))
+        client.fetch_sync(Request(url="https://e.com/b"))
+        assert created == {"opened": 1, "closed": 0}
+
+        client.close()
+        assert created == {"opened": 1, "closed": 1}
+
+    def test_httpx_per_request_timeout_overrides_default(self, monkeypatch):
+        seen = {}
+
+        class FakeResp:
+            status_code = 200
+            encoding = "utf-8"
+            content = b"ok"
+            text = "ok"
+            headers = {}
+            cookies = {}
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def request(self, **kwargs):
+                seen.update(kwargs)
+                return FakeResp()
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(httpx, "Client", FakeClient)
+        client = HttpxClient(timeout=30)
+
+        client.fetch_sync(Request(url="https://e.com/a", timeout=1.5))
+
+        assert seen["timeout"] == 1.5

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import time
@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from web_harvester.core import Item, Request
-from web_harvester.core.engine import CrawlerEngine, build_engine
+from web_harvester.core.engine import CrawlerEngine, CrawlStopped, build_engine
 from web_harvester.crawler import BaseCrawler
 from web_harvester.storage import BaseStorage
 
@@ -697,3 +697,106 @@ class TestDryRun:
         original = Request(url="https://e.com/a", is_article=True)
         assert original.copy().is_article is True
         assert Request(url="https://e.com/a").copy().is_article is False
+
+class TestRateLimiterIntegration:
+    def test_sync_fetch_waits_on_limiter(self, monkeypatch):
+        engine = make_engine("sync")
+        waited = []
+        monkeypatch.setattr(engine._rate_limiter, "wait", lambda url, should_stop=None: waited.append(url))
+        monkeypatch.setattr(engine._http_client, "fetch_sync", lambda request: _response(request))
+
+        items = engine.run(FakeCrawler(["https://e.com/a", "https://e.com/b"], {"max_items": 5}))
+
+        assert waited == ["https://e.com/a", "https://e.com/b"]
+        assert len(items) == 2
+
+    def test_async_fetch_waits_on_limiter(self, monkeypatch):
+        engine = make_engine("async")
+        waited = []
+
+        async def record(url, should_stop=None):
+            waited.append(url)
+
+        async def fake_fetch(request):
+            return _response(request)
+
+        monkeypatch.setattr(engine._rate_limiter, "wait_async", record)
+        monkeypatch.setattr(engine._http_client, "fetch_async", fake_fetch)
+
+        items = engine.run(FakeCrawler(["https://e.com/a"], {"max_items": 5}))
+
+        assert waited == ["https://e.com/a"]
+        assert len(items) == 1
+
+    def test_stopped_engine_drops_request_before_sending(self):
+        engine = make_engine("sync")
+        engine._stop_fetching = True
+        with pytest.raises(CrawlStopped):
+            engine._fetch_sync(Request(url="https://e.com/a"))
+
+
+class TestCrawlTimeoutBudget:
+    def test_sync_caps_request_timeout_to_remaining_budget(self, monkeypatch):
+        seen = []
+
+        def slow_fetch(request):
+            seen.append(request.timeout)
+            time.sleep(0.02)
+            return _response(request)
+
+        engine = make_engine("sync")
+        monkeypatch.setattr(engine._http_client, "fetch_sync", slow_fetch)
+        crawler = FakeCrawler([f"https://e.com/{i}" for i in range(5)], {"timeout": 0.06})
+
+        items = engine.run(crawler)
+
+        assert 0 < len(items) < 5
+        assert seen
+        assert all(timeout is not None and 0 < timeout <= 0.06 for timeout in seen)
+
+    def test_sync_does_not_send_request_after_budget_exhausted(self, monkeypatch):
+        calls = []
+
+        def slow_fetch(request):
+            calls.append(request.url)
+            time.sleep(0.05)
+            return _response(request)
+
+        engine = make_engine("sync")
+        monkeypatch.setattr(engine._http_client, "fetch_sync", slow_fetch)
+        crawler = FakeCrawler([f"https://e.com/{i}" for i in range(10)], {"timeout": 0.12})
+
+        items = engine.run(crawler)
+
+        assert len(calls) < 10
+        assert len(items) == len(calls)
+
+    def test_async_timeout_cancels_in_flight_request(self, monkeypatch):
+        async def never_returns(request):
+            await asyncio.sleep(30)
+            return _response(request)
+
+        engine = make_engine("async")
+        monkeypatch.setattr(engine._http_client, "fetch_async", never_returns)
+        crawler = FakeCrawler(["https://e.com/a", "https://e.com/b"], {"timeout": 0.05})
+
+        start = time.monotonic()
+        items = engine.run(crawler)
+
+        assert time.monotonic() - start < 1.0
+        assert items == []
+
+
+class TestAsyncMaxItemsExactness:
+    def test_concurrent_workers_stop_at_limit(self, monkeypatch):
+        engine = make_engine("async", concurrency=10)
+
+        async def fake_fetch(request):
+            return _response(request)
+
+        monkeypatch.setattr(engine._http_client, "fetch_async", fake_fetch)
+        crawler = FakeCrawler([f"https://e.com/{i}" for i in range(20)], {"max_items": 2})
+
+        items = engine.run(crawler)
+
+        assert len(items) == 2

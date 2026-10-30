@@ -21,6 +21,9 @@ class Request:
         errback: The name of the error callback function to call if the request fails.
         is_article: Whether the request targets an article page. Dry runs use it
             to skip per-article fetches while still crawling the list pages.
+        timeout: Per-request timeout in seconds. The engine sets the remaining
+            crawl budget here so a single request cannot outlive the overall
+            timeout; None falls back to the client default.
     """
 
     url: str
@@ -34,6 +37,7 @@ class Request:
     callback: Optional[str] = None
     errback: Optional[str] = None
     is_article: bool = False
+    timeout: Optional[float] = None
 
     def copy(self) -> Request:
         return Request(
@@ -48,6 +52,7 @@ class Request:
             callback=self.callback,
             errback=self.errback,
             is_article=self.is_article,
+            timeout=self.timeout,
         )
 
     def __repr__(self):

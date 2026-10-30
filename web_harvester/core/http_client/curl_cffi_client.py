@@ -11,8 +11,21 @@ from .base import BaseHttpClient
 
 logger = logging.getLogger(__name__)
 
+IMPORT_HINT = (
+    "curl_cffi is not installed but http_client='curl_cffi' is configured. "
+    "Install it with: pip install curl_cffi"
+)
+
 
 class CurlCffiClient(BaseHttpClient):
+    """curl_cffi backed client with connection reuse.
+
+    A single :class:`curl_cffi.requests.Session` is created on first use and
+    reused for every subsequent request so TCP and TLS fingerprints are
+    negotiated once instead of per request. Call :meth:`close` (sync) or
+    :meth:`aclose` (async) to release the sessions.
+    """
+
     def __init__(
         self,
         timeout: float = 30,
@@ -28,6 +41,8 @@ class CurlCffiClient(BaseHttpClient):
         self._impersonate: Optional[str] = impersonate if impersonate != "" else None
         self._ja3 = ja3
         self._akamai = akamai
+        self._session: Optional[Any] = None
+        self._async_session: Optional[Any] = None
 
         if self._impersonate and (ja3 or akamai):
             logger.warning(
@@ -52,7 +67,7 @@ class CurlCffiClient(BaseHttpClient):
         return kwargs
 
     @staticmethod
-    def _raise_for_status(request: Request, status_code: int, headers: Dict[str, str], text: str) -> None:
+    def _raise_for_status(request: Request, status_code: int, headers: Dict[str, str]) -> None:
         if 200 <= status_code < 300:
             return
         raise httpx.HTTPStatusError(
@@ -77,14 +92,12 @@ class CurlCffiClient(BaseHttpClient):
     @staticmethod
     def _headers_to_dict(headers: Any) -> Dict[str, str]:
         try:
-            if isinstance(headers, dict):
-                return dict(headers)
             return dict(headers)
         except Exception:
             return {}
 
     def _build_response(self, request: Request, resp: Any) -> Response:
-        self._raise_for_status(request, resp.status_code, dict(resp.headers), resp.text)
+        self._raise_for_status(request, resp.status_code, dict(resp.headers))
         headers = self._headers_to_dict(resp.headers)
         cookies = self._cookies_to_dict(getattr(resp, "cookies", {}))
         encoding = getattr(resp, "encoding", None) or "utf-8"
@@ -101,48 +114,56 @@ class CurlCffiClient(BaseHttpClient):
             encoding=encoding,
         )
 
-    def fetch_sync(self, request: Request) -> Response:
-        try:
-            from curl_cffi import requests as crequests
-        except ImportError as e:
-            raise ImportError(
-                "curl_cffi is not installed but http_client='curl_cffi' is configured. "
-                "Install it with: pip install curl_cffi"
-            ) from e
+    def _get_session(self) -> Any:
+        """Return the shared synchronous session, creating it on first use."""
+        if self._session is None:
+            try:
+                from curl_cffi import requests as crequests
+            except ImportError as e:
+                raise ImportError(IMPORT_HINT) from e
+            self._session = crequests.Session(**self._session_kwargs())
+        return self._session
 
-        session_kwargs = self._session_kwargs()
-        with crequests.Session(**session_kwargs) as session:
-            resp = session.request(
-                method=request.method,
-                url=request.url,
-                headers=request.headers or None,
-                cookies=request.cookies or None,
-                params=request.params or None,
-                data=request.body,
-                json=request.json_body,
-                timeout=self._timeout,
-            )
-            return self._build_response(request, resp)
+    def _get_async_session(self) -> Any:
+        """Return the shared asynchronous session, creating it on first use."""
+        if self._async_session is None:
+            try:
+                from curl_cffi.requests import AsyncSession
+            except ImportError as e:
+                raise ImportError(IMPORT_HINT) from e
+            self._async_session = AsyncSession(**self._session_kwargs())
+        return self._async_session
+
+    def _request_kwargs(self, request: Request) -> Dict[str, Any]:
+        return {
+            "method": request.method,
+            "url": request.url,
+            "headers": request.headers or None,
+            "cookies": request.cookies or None,
+            "params": request.params or None,
+            "data": request.body,
+            "json": request.json_body,
+            "timeout": request.timeout or self._timeout,
+        }
+
+    def fetch_sync(self, request: Request) -> Response:
+        session = self._get_session()
+        resp = session.request(**self._request_kwargs(request))
+        return self._build_response(request, resp)
 
     async def fetch_async(self, request: Request) -> Response:
-        try:
-            from curl_cffi.requests import AsyncSession
-        except ImportError as e:
-            raise ImportError(
-                "curl_cffi is not installed but http_client='curl_cffi' is configured. "
-                "Install it with: pip install curl_cffi"
-            ) from e
+        session = self._get_async_session()
+        resp = await session.request(**self._request_kwargs(request))
+        return self._build_response(request, resp)
 
-        session_kwargs = self._session_kwargs()
-        async with AsyncSession(**session_kwargs) as session:
-            resp = await session.request(
-                method=request.method,
-                url=request.url,
-                headers=request.headers or None,
-                cookies=request.cookies or None,
-                params=request.params or None,
-                data=request.body,
-                json=request.json_body,
-                timeout=self._timeout,
-            )
-            return self._build_response(request, resp)
+    def close(self) -> None:
+        """Close the shared synchronous session, if any."""
+        session, self._session = self._session, None
+        if session is not None:
+            session.close()
+
+    async def aclose(self) -> None:
+        """Close the shared asynchronous session, if any."""
+        session, self._async_session = self._async_session, None
+        if session is not None:
+            await session.close()
