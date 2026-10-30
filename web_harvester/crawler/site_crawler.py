@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, Generator, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 from urllib.parse import urljoin
 
 from ..core.item import Item
@@ -344,10 +344,18 @@ class SiteCrawler(BaseCrawler):
         else:
             results = self._parse_html_list(response, extract, headers, cookies)
 
+        exclude = self._compile_exclude_patterns(extract.get("exclude_patterns"))
         count = 0
+        skipped = 0
         for result in results:
+            if exclude and any(pattern.search(result.url) for pattern in exclude):
+                skipped += 1
+                logger.debug(f"Excluded by exclude_patterns: {result.url}")
+                continue
             count += 1
             yield result
+        if skipped:
+            logger.info(f"Excluded {skipped} URL(s) by exclude_patterns: {response.url}")
         logger.info(f"List page parsed: {response.url} -> {count} link(s)")
 
         next_request = self._build_next_cursor_request(response)
@@ -399,6 +407,17 @@ class SiteCrawler(BaseCrawler):
             callback="parse_list",
             meta={"page": next_page, "cursor": next_cursor},
         )
+
+    @staticmethod
+    def _compile_exclude_patterns(patterns: Optional[List[str]]) -> List["re.Pattern[str]"]:
+        """Compile ``exclude_patterns`` into regexes, skipping invalid entries."""
+        compiled: List[re.Pattern[str]] = []
+        for pattern in patterns or []:
+            try:
+                compiled.append(re.compile(pattern))
+            except re.error as e:
+                logger.warning(f"Invalid exclude_patterns entry '{pattern}': {e}")
+        return compiled
 
     def _parse_html_list(
         self,
@@ -587,11 +606,7 @@ class SiteCrawler(BaseCrawler):
                 field_as = field_cfg.get("as")
 
                 if field_as == "datetime":
-                    date_format = field_cfg.get("datetime_format")
-                    if date_format:
-                        return datetime.strptime(value, date_format)
-                    else:
-                        return datetime.fromisoformat(value)
+                    return self._parse_datetime(value, field_cfg)
                 elif field_as == "text":
                     regex = field_cfg.get("regex")
                     if regex:
@@ -609,4 +624,38 @@ class SiteCrawler(BaseCrawler):
             return value
         except Exception as e:
             logger.warning(f"Failed to extract field with value '{value}' and config '{field_cfg}': {e}")
-            return value
+            return None
+
+    @staticmethod
+    def _parse_datetime(value: str, field_cfg: Dict[str, Any]) -> Optional[datetime]:
+        """Convert ``value`` to a datetime, or None when it cannot be parsed.
+
+        ``datetime_format`` may be a single strptime format or a list tried in
+        order; without it the value must be ISO-8601. Returning None keeps
+        ``published_at`` typed as ``datetime | None`` for every backend instead
+        of leaking the raw string into storage.
+        """
+        raw_format = field_cfg.get("datetime_format")
+        if isinstance(raw_format, str):
+            formats: List[str] = [raw_format]
+        elif isinstance(raw_format, (list, tuple)):
+            formats = [str(fmt) for fmt in raw_format]
+        else:
+            formats = []
+
+        text = value.strip()
+        if not formats:
+            try:
+                return datetime.fromisoformat(text)
+            except ValueError:
+                logger.warning(f"Value '{value}' is not an ISO-8601 datetime")
+                return None
+
+        for date_format in formats:
+            try:
+                return datetime.strptime(text, date_format)
+            except ValueError:
+                continue
+
+        logger.warning(f"Value '{value}' did not match any datetime format {formats}")
+        return None

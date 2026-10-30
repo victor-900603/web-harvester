@@ -305,6 +305,11 @@
         "link_attr": {
           "type": "string",
           "description": "Attribute to read the link URL from (default: href)."
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Regexes; list URLs matching any pattern are skipped."
         }
       },
       "required": ["item_selector"]
@@ -329,6 +334,11 @@
         "url_filter": {
           "type": "string",
           "description": "Optional regex; items whose final URL does not match are skipped."
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Regexes; list URLs matching any pattern are skipped."
         }
       },
       "required": ["items_path", "url_field"]
@@ -483,8 +493,11 @@
           "description": "Attribute to extract. Defaults to 'text'."
         },
         "datetime_format": {
-          "type": "string",
-          "description": "strptime format used when as is 'datetime'."
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          ],
+          "description": "strptime format (or formats tried in order) used when as is 'datetime'."
         },
         "regex": {
           "type": "string",
@@ -508,8 +521,11 @@
           "description": "JSON path (JSON article pages)."
         },
         "datetime_format": {
-          "type": "string",
-          "description": "strptime format used when as is 'datetime'."
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          ],
+          "description": "strptime format (or formats tried in order) used when as is 'datetime'."
         },
         "regex": {
           "type": "string",

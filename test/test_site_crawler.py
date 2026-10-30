@@ -336,6 +336,56 @@ class TestParseList:
         assert all(r.callback == "parse_article" for r in results)
         assert all(r.is_article for r in results)
 
+    def test_html_list_excludes_matching_urls(self, sample_site_config):
+        sample_site_config["list_page"]["sources"][0]["extract"]["exclude_patterns"] = [
+            r"/news/2"
+        ]
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news?page=1",
+            "<article class='news-item'><a href='/news/1'>One</a></article>"
+            "<article class='news-item'><a href='/news/2'>Two</a></article>",
+        )
+        results = list(crawler.parse_list(resp))
+        assert [r.url for r in results] == ["https://example.com/news/1"]
+
+    def test_json_list_excludes_matching_urls(self, sample_site_config):
+        sample_site_config["list_page"] = {
+            "sources": [
+                {
+                    "url": "https://example.com/api",
+                    "type": "json",
+                    "extract": {
+                        "items_path": "data.articles",
+                        "url_field": "slug",
+                        "url_template": "https://example.com{url}",
+                        "exclude_patterns": [r"netzero\.example\.com"],
+                    },
+                },
+            ],
+        }
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/api",
+            '{"data": {"articles": [{"slug": "/news/1"}, {"slug": "//netzero.example.com/news/2"}]}}',
+        )
+        results = list(crawler.parse_list(resp))
+        assert [r.url for r in results] == ["https://example.com/news/1"]
+
+    def test_invalid_exclude_pattern_is_ignored(self, sample_site_config, caplog):
+        sample_site_config["list_page"]["sources"][0]["extract"]["exclude_patterns"] = [
+            "[unclosed"
+        ]
+        crawler = SiteCrawler(sample_site_config)
+        resp = make_response(
+            "https://example.com/news?page=1",
+            "<article class='news-item'><a href='/news/1'>One</a></article>",
+        )
+        with caplog.at_level(logging.WARNING, logger="web_harvester.crawler.site_crawler"):
+            results = list(crawler.parse_list(resp))
+        assert len(results) == 1
+        assert any("Invalid exclude_patterns entry" in rec.getMessage() for rec in caplog.records)
+
     def test_html_list_without_article_config_yields_items(self, sample_site_config):
         sample_site_config["article_page"] = {}
         crawler = SiteCrawler(sample_site_config)
@@ -586,14 +636,45 @@ class TestParseArticle:
         value = crawler._extract_field("id-123", {"as": "text", "regex": r"(\d+)"})
         assert value == "123"
 
-    def test_extract_field_returns_raw_value_on_error(self, sample_site_config):
+    def test_extract_field_returns_none_on_unparsable_datetime(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
         value = crawler._extract_field("not-a-date", {"as": "datetime", "datetime_format": "%Y"})
-        assert value == "not-a-date"
+        assert value is None
 
     def test_extract_field_none_returns_none(self, sample_site_config):
         crawler = SiteCrawler(sample_site_config)
         assert crawler._extract_field(None, {"as": "text", "selector": "div.author"}) is None
+
+    def test_datetime_format_list_tries_each_entry(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        value = crawler._parse_datetime(
+            "2026/10/30 13:41:57",
+            {"datetime_format": ["%Y-%m-%dT%H:%M:%S%z", "%Y/%m/%d %H:%M:%S"]},
+        )
+        assert value == datetime(2026, 10, 30, 13, 41, 57)
+
+    def test_datetime_format_single_string(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        value = crawler._parse_datetime("30/10/2026", {"datetime_format": "%d/%m/%Y"})
+        assert value == datetime(2026, 10, 30)
+
+    def test_datetime_all_formats_fail_returns_none(self, sample_site_config, caplog):
+        crawler = SiteCrawler(sample_site_config)
+        with caplog.at_level(logging.WARNING, logger="web_harvester.crawler.site_crawler"):
+            value = crawler._parse_datetime(
+                "2026/10/30 13:41:57", {"datetime_format": ["%Y-%m-%d"]}
+            )
+        assert value is None
+        assert any("did not match any datetime format" in rec.getMessage() for rec in caplog.records)
+
+    def test_datetime_without_format_uses_isoformat(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        value = crawler._parse_datetime("2026-10-30T13:41:57+08:00", {})
+        assert value == datetime.fromisoformat("2026-10-30T13:41:57+08:00")
+
+    def test_datetime_without_format_rejects_non_iso(self, sample_site_config):
+        crawler = SiteCrawler(sample_site_config)
+        assert crawler._parse_datetime("2026/10/30 13:41:57", {}) is None
 
     def test_html_field_selector_no_match_skipped(self, sample_site_config):
         sample_site_config["article_page"] = {

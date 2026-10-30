@@ -230,8 +230,9 @@ request:
 | `item_selector` | `string` | 是 | `"a"`（僅 `_parse_html_list` 內） | 每筆列表項容器的 CSS selector |
 | `link_selector` | `string` | 否 | `"a"` | 容器內連結元素的 CSS selector；等於 `item_selector` 時直接取容器本身（`site_crawler.py:273`） |
 | `link_attr` | `string` | 否 | `"href"` | 連結屬性名；`text` 表示取元素文字（`site_crawler.py:277`） |
+| `exclude_patterns` | `string[]` | 否 | - | 選用正則陣列；最終 URL 命中任一條即排除（`re.search`），被排除的連結不產生文章請求，例：`["netzero\\.cna\\.com\\.tw"]` |
 
-行為細節：遍歷 `parser.select(item_selector)` → 每項取 `select_one(link_selector)` → `get(link_attr)` 或 `get_text` → `urljoin(base_url, href)`。
+行為細節：遍歷 `parser.select(item_selector)` → 每項取 `select_one(link_selector)` → `get(link_attr)` 或 `get_text` → `urljoin(base_url, href)` → 套用 `exclude_patterns` 過濾（HTML 與 JSON 共用，於 `parse_list` 統一處理）。
 
 #### JSON 列表（`type: json`，`web_harvester/crawler/site_crawler.py:_parse_json_list`）
 
@@ -241,8 +242,9 @@ request:
 | `url_field` | `string` | 是 | `"url"` | 每筆 item 內文章 URL 的欄位名（僅取當層 key，非 path） |
 | `url_template` | `string` | 否 | `"{url}"` | 用 `{url}` 佔位符組合最終 URL（`site_crawler.py:324` `format(url=raw_url)`）；空字串時改走 `urljoin(base_url, raw_url)` |
 | `url_filter` | `string` | 否 | - | 選用正則；最終 URL 不符者跳過（`re.search`，如僅保留主網域文章） |
+| `exclude_patterns` | `string[]` | 否 | - | 選用正則陣列；最終 URL 命中任一條即排除，與 `url_filter` 方向相反，兩者可併用 |
 
-行為細節：`parser.extract_path(items_path)` → 非陣列則包為單項陣列（物件取其 values）→ 每項取 `item[url_field]` → `url_template.format(url=raw_url)` → 若 `url_filter` 且 URL 不符則跳過 → 注入 `meta.list_data` 供分類 `json/from: list_data` 使用（`site_crawler.py:328-335`）。
+行為細節：`parser.extract_path(items_path)` → 非陣列則包為單項陣列（物件取其 values）→ 每項取 `item[url_field]` → `url_template.format(url=raw_url)` → 若 `url_filter` 且 URL 不符則跳過 → 套用 `exclude_patterns` → 注入 `meta.list_data` 供分類 `json/from: list_data` 使用。
 
 ### 5.4 pagination
 
@@ -326,7 +328,7 @@ fields:
     as: "datetime"
     selector: "time"
     attr: "text"
-    datetime_format: "%Y-%m-%d %H:%M"
+    datetime_format: ["%Y-%m-%dT%H:%M:%S%z", "%Y/%m/%d %H:%M:%S"]  # 依序嘗試
   published_at:                    # json 物件
     as: "datetime"
     path: "data.publishedAt"
@@ -340,7 +342,7 @@ fields:
 | `selector` | `string` | 是 | - | CSS selector（`site_crawler.py:388` 缺省即 `warning` 跳過） |
 | `attr` | `string` | 否 | `"text"` | 擷取屬性；`text` 取 `parser.extract(selector, "text")` 的文字，否則取 `el.get(attr)`（`site_crawler.py:392-393`；常見 `content` 取 `<meta>`） |
 | `as` | `enum: text\|datetime` | 否 | 省略即 raw | 萃取策略（見 [§6.4](#64-共通行為-as--regex--datetime_format)） |
-| `datetime_format` | `string` | 否 | `fromisoformat` | 僅 `as: datetime` 時有效；`strptime` 格式，未指定時走 `datetime.fromisoformat`（`site_crawler.py:433-438`） |
+| `datetime_format` | `string` 或 `string[]` | 否 | `fromisoformat` | 僅 `as: datetime` 時有效；`strptime` 格式，可給陣列依序嘗試；未指定時走 `datetime.fromisoformat`；全部失敗回 `None` |
 | `regex` | `string` | 否 | - | 對擷取結果套正則，取 `match.groups()` 以 `/` 串接（`site_crawler.py:441-443,448-450`） |
 
 ### 6.3 JSON 欄位物件（`$defs/json_field_config`，`article_page.type: json` 時）
@@ -360,7 +362,9 @@ fields:
 |------|------|
 | 省略（raw） | 若有 `regex` 則套用 `re.search` 取 groups 串接，否則原樣回傳 |
 | `text` | `value.strip()`；若有 `regex` 先套用再 `strip` |
-| `datetime` | 若有 `datetime_format` 則 `datetime.strptime(value, format)`，否則 `datetime.fromisoformat(value)`；`regex` 不適用於此分支 |
+| `datetime` | 若有 `datetime_format`（字串或字串陣列，依序嘗試 `strptime`）則逐一比對，否則 `datetime.fromisoformat(value)`；全部失敗記 warning 並回傳 `None`；`regex` 不適用於此分支 |
+
+> `published_at` 的型別契約固定為 `datetime | None`，解析失敗不會把原始字串往儲存層傳（否則 SQLite 的 DateTime 欄位會拒收整筆）。
 
 > 例：取 `<meta name="author" content="...">` 無需宣告 `as`，僅寫 `selector` + `attr: content` 即可（`as` 省略仍可配合 `regex`）。
 

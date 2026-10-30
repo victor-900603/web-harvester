@@ -41,6 +41,8 @@ list_page:
         items_path: "ResultData.Items"
         url_field: "PageUrl"
         url_template: "{url}"
+        exclude_patterns:
+          - "netzero\\.cna\\.com\\.tw"
       pagination:
         enabled: true
         start: 1
@@ -75,6 +77,9 @@ article_page:
       as: "datetime"
       selector: 'meta[property="article:published_time"]'
       attr: "content"
+      datetime_format:
+        - "%Y-%m-%dT%H:%M:%S%z"
+        - "%Y/%m/%d %H:%M:%S"
 
     author:
       as: "text"
