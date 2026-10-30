@@ -9,12 +9,22 @@
 站點差異（列表 API、分頁方式、selector、欄位格式）全部收斂在 `config/sites/<name>.yaml`；
 程式碼只實作通用流程：請求、重試、解析、去重、儲存。
 
+## 三步開始
+
+```bash
+git clone https://github.com/victor-900603/web-harvester.git
+cd web-harvester && pip install -e ".[dev]"
+web-harvester --site udn_news --max-items 3
+```
+
+不需要其他設定：資料寫入 `data/articles.db`，日誌寫入 `logs/app.log`。安裝後也可直接執行 `python main.py`，兩者等價。
+
 ## 為什麼是這個作法
 
 - **站點差異留在設定層**：新增站點不必碰 Python，也不會出現十個 `if site == "..."` 的分支。
 - **不依賴瀏覽器**：不引入 Playwright / Selenium。預設以 `curl_cffi` 模擬瀏覽器 TLS 指紋（JA3/Akamai）通過反爬，必要時可切回 `httpx`。
 - **錯誤在啟動時就爆**：所有 YAML 以 JSON Schema 嚴格驗證（`additionalProperties: false`），打錯欄位名稱會立刻 `ConfigValidationError`，而不是安靜地爬回零筆資料。
-- **可驗證**：397 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+- **可驗證**：405 個測試（含不打網路的整合測試）、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
 - **對站方禮貌**：per-domain 最小間隔、robots.txt 檢查、有上限的併發與重試，並重用 HTTP session 避免重複握手。
 
 ## 實際執行輸出
@@ -163,9 +173,25 @@ web-harvester --site udn_news --category 股市
 web-harvester --site udn_news --keyword 台股 --category 股市
 ```
 
-## 新增一個站點
+## 五分鐘新增一個站點
 
-只需要新增 `config/sites/<name>.yaml`，程式碼與 CLI 都不用改：
+只需要新增 `config/sites/<name>.yaml`，程式碼與 CLI 都不用改。以內建的 `example.yaml` 為模板：
+
+1. 複製樣板：`cp config/sites/example.yaml config/sites/mysite.yaml`
+2. 改 `name`、`base_url`，以及列表項目、標題、內文、時間四組 selector
+3. 先只驗證列表頁：`web-harvester --site mysite --dry-run --max-pages 1`
+4. 文章數合理後再正式抓三筆，核對欄位：`web-harvester --site mysite --max-items 3`
+
+第 3 步的輸出會直接告訴你有幾篇文章可抓，若顯示 0 就是列表 selector 沒命中：
+
+```console
+$ web-harvester --site mysite --dry-run --max-pages 1
+2026-10-30 17:02:11 [INFO] web_harvester.crawler.site_crawler: List page parsed: https://mysite.example/news?page=1 -> 20 link(s)
+2026-10-30 17:02:11 [INFO] web_harvester.core.engine: Total requests made: 1, total items collected: 0, skipped known URLs: 0, skipped by robots.txt: 0, article pages skipped (dry run): 20
+Dry run finished: 20 article page(s) would be fetched, 0 item(s) stored.
+```
+
+最小可用的設定長這樣：
 
 ```yaml
 name: "example"
@@ -252,14 +278,18 @@ web-harvester --site example
 ```bash
 pip install -e ".[dev]"
 
-pytest                    # 357 passed
-pytest --cov              # 覆蓋率 91%（門檻 85%）
+pytest                    # 405 passed
+pytest --cov              # 覆蓋率 91.27%（門檻 85%）
 ruff check web_harvester main.py test
 mypy
 ```
 
 單元測試不連真實網路：engine 測試透過 monkeypatch `CrawlerEngine._process_sync` / `_fetch_async` 模擬回應；
-storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）在每次 push 與 PR 執行 lint、type check 與測試。
+storage 測試使用 pytest 的 `tmp_path` 暫時目錄。
+
+`test/test_integration_offline.py` 另外用 `test/fixtures/` 內擷取自真實站點的頁面，從設定載入、列表解析、文章解析到寫檔跑完整條流程，同樣不發任何請求。站方改版導致 fixture 過期時，執行 `python test/fixtures/capture_fixtures.py` 重新擷取。
+
+CI（GitHub Actions）在每次 push 與 PR 執行 lint、type check 與測試。
 
 ## 與其他工具的差異
 
