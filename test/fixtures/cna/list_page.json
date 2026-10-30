@@ -1,0 +1,78 @@
+{
+  "Result": "Y",
+  "ResultData": {
+    "Category": "aall",
+    "CategoryName": "即時",
+    "SubCategory": [],
+    "NextPageIdx": "3",
+    "MetaData": {
+      "Title": "即時 | 中央社 CNA",
+      "Description": "中央社即時報導國際、財經、科技、醫藥、生活、運動、教育、政治、影劇、社會、地方即時新聞，提供Facebook、Google+社群討論、分享功能。",
+      "KeyWords": "News,新聞,即時新聞,中央社",
+      "Image": "https://imgcdn.cna.com.tw/www/images/pic_fb.jpg",
+      "CanonicalUrl": "https://www.cna.com.tw/list/aall.aspx",
+      "DateCreated": "",
+      "DateModified": "",
+      "OgImage": "https://imgcdn.cna.com.tw/www/images/pic_fb.jpg"
+    },
+    "Items": [
+      {
+        "Idx": 0,
+        "Id": "202610300152",
+        "ClassName": "國際",
+        "ClassPageUrl": "",
+        "PageUrl": "https://www.cna.com.tw/news/aopl/202610300152.aspx",
+        "TNo": "0",
+        "NewsTopicName": "東南亞霾害",
+        "NewsTopicType": "A",
+        "HeadLine": "印尼野火釀嚴重霾害　9月估釀3560死",
+        "HeadLine2": "",
+        "CreateTime": "2026/10/30 14:38",
+        "ImageS": "https://imgcdn.cna.com.tw/www/WebPhotos/200/20260906/900x600_wmkn_361453062531_0.jpg",
+        "ImageM": "https://imgcdn.cna.com.tw/www/WebPhotos/400/20260906/900x600_wmkn_361453062531_0.jpg",
+        "ImageL": "https://imgcdn.cna.com.tw/www/WebPhotos/800/20260906/900x600_wmkn_361453062531_0.jpg",
+        "AudioUrl": "",
+        "IsInSubsite": false,
+        "TagDictionaries": []
+      },
+      {
+        "Idx": 1,
+        "Id": "202610300154",
+        "ClassName": "地方",
+        "ClassPageUrl": "",
+        "PageUrl": "https://www.cna.com.tw/news/aloc/202610300154.aspx",
+        "TNo": "0",
+        "NewsTopicName": "",
+        "NewsTopicType": "",
+        "HeadLine": "嘉義太保市安仁里長尋求連任因車禍亡　須另行選舉",
+        "HeadLine2": "",
+        "CreateTime": "2026/10/30 14:41",
+        "ImageS": "",
+        "ImageM": "",
+        "ImageL": "",
+        "AudioUrl": "",
+        "IsInSubsite": false,
+        "TagDictionaries": []
+      },
+      {
+        "Idx": 3,
+        "Id": "202610300131",
+        "ClassName": "國際趨勢",
+        "ClassPageUrl": "",
+        "PageUrl": "https://netzero.cna.com.tw/news/202610300131/",
+        "TNo": "0",
+        "NewsTopicName": "國際趨勢",
+        "NewsTopicType": "C",
+        "HeadLine": "中國綠能出口創新高　一年減碳可抵巴西整年碳排",
+        "HeadLine2": "",
+        "CreateTime": "2026/10/30 13:41",
+        "ImageS": "",
+        "ImageM": "",
+        "ImageL": "",
+        "AudioUrl": "",
+        "IsInSubsite": false,
+        "TagDictionaries": []
+      }
+    ]
+  }
+}
