@@ -14,7 +14,8 @@
 - **站點差異留在設定層**：新增站點不必碰 Python，也不會出現十個 `if site == "..."` 的分支。
 - **不依賴瀏覽器**：不引入 Playwright / Selenium。預設以 `curl_cffi` 模擬瀏覽器 TLS 指紋（JA3/Akamai）通過反爬，必要時可切回 `httpx`。
 - **錯誤在啟動時就爆**：所有 YAML 以 JSON Schema 嚴格驗證（`additionalProperties: false`），打錯欄位名稱會立刻 `ConfigValidationError`，而不是安靜地爬回零筆資料。
-- **可驗證**：357 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+- **可驗證**：381 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+- **對站方禮貌**：per-domain 最小間隔、robots.txt 檢查、有上限的併發與重試，並重用 HTTP session 避免重複握手。
 
 ## 實際執行輸出
 
@@ -63,6 +64,9 @@ Dry run finished: 20 article page(s) would be fetched, 0 item(s) stored.
 - **增量爬取**：啟動時載入儲存後端已存的 URL，預設略過已知文章（`--no-skip-seen` 可關閉）
 - **robots.txt 遵循**：請求前檢查目標網域的 robots.txt，預設開啟（`request.respect_robots`）
 - **重試機制**：可設定最大重試次數，支援指數回退與 `Retry-After`（僅重試可重試錯誤）
+- **per-domain 限速**：`engine.download_delay` 為同一網域的最小請求間隔，不同網域互不阻塞，非同步模式下也成立
+- **連線重用**：HTTP client 只建立一次 session，後續請求沿用既有連線，避免每次重新握手
+- **可中斷的逾時**：`limits.timeout` 會換算成每個請求的剩餘預算；非同步模式以 `asyncio.wait_for` 真的取消請求
 - **跨站分類統一**：`category_normalization` 將各站分類對應到統一詞彙，便於跨站比對
 
 ## 架構
@@ -271,7 +275,8 @@ storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）
 - 站點改版後需自行維護 selector 與列表來源
 - 單機執行，尚無分散式排程
 - 未處理登入、付費牆與驗證碼
-- 非同步模式的 `max_items` 為近似上限：worker 並行時，實際收集數可能略超過設定值
+- 非同步模式的 `max_items` 在達到上限後會停止派發新請求，但已在傳輸中的請求仍可能完成，因此實際筆數可能略高於設定值
+- 同步模式的整體 `timeout` 無法中斷正在進行的單一請求，但每個請求的 timeout 已被限制為「剩餘預算」，不會再額外多等一個完整的 `request_timeout`
 - `request.respect_robots` 預設開啟；`tvbs` 站點因其列表 API 的 robots.txt 為 `Disallow: /`，在設定檔中明確關閉，使用前請自行判斷
 - 仍應自行確認目標站點的使用條款
 

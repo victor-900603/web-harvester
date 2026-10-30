@@ -70,8 +70,8 @@ category_normalization: {}
 |------|------|--------|
 | `engine.mode` | 執行模式（`sync` / `async`） | `sync` |
 | `engine.max_concurrency` | 非同步模式最大並行數 | `10` |
-| `engine.request_timeout` | 請求逾時（秒） | `30` |
-| `engine.download_delay` | 同一網域請求間隔（秒） | `1.0` |
+| `engine.request_timeout` | 單一請求逾時（秒）；實際值取 `min(request_timeout, 剩餘的 limits.timeout 預算)` | `30` |
+| `engine.download_delay` | 同一網域相鄰請求的最小間隔（秒），`0` 表示停用；不同網域互不影響 | `1.0` |
 | `engine.max_retries` | 失敗請求最大嘗試次數（僅可重試錯誤；含首次嘗試） | `3` |
 | `engine.retry.base_delay` | 第一次重試前的延遲（秒） | `1.0` |
 | `engine.retry.max_delay` | 單次回退延遲上限（秒） | `30.0` |
@@ -108,10 +108,10 @@ category_normalization: {}
 
 | 欄位 | 說明 | 預設值 |
 |------|------|--------|
-| `limits.max_items` | 最大爬取筆數，達到即停止；非同步模式因多個 worker 並行，實際收集數可能略超過此值 | `100` |
+| `limits.max_items` | 最大爬取筆數，達到即停止；非同步模式會停止派發新請求，但已在傳輸中的請求仍可能完成，因此可能略高於設定值 | `100` |
 | `limits.max_pages` | 最大爬取頁數上限（唯一權威值，`pagination` 只管 `enabled`/`type`/`start`/`next_cursor_path`） | `3` |
 | `limits.stop_on_duplicate` | 遇到重複 URL 即停止；未開啟則跳過繼續 | `false` |
-| `limits.timeout` | 整體爬取時間上限（秒） | `180` |
+| `limits.timeout` | 整體爬取時間上限（秒）；會換算成每個請求的剩餘預算，非同步模式以 `asyncio.wait_for` 取消逾時請求 | `180` |
 
 ### category_normalization
 

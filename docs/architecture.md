@@ -7,7 +7,8 @@
 | 入口 | `web_harvester/cli.py`（`main.py` 為相容薄層） | 解析 CLI、解析設定目錄、載入站點設定、建立 Settings 與 Engine |
 | 設定 | `web_harvester/utils/config.py` | 載入 YAML、JSON Schema 驗證、合併 limits 與分類對照表 |
 | 引擎 | `web_harvester/core/engine.py` | 佇列排程、重試、限制條件、儲存掛載 |
-| 請求 | `web_harvester/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援） |
+| 請求 | `web_harvester/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援）、session 重用 |
+| 節流 | `web_harvester/core/rate_limit.py` | per-domain 最小請求間隔，支援同步與非同步等待 |
 | 合規 | `web_harvester/core/robots.py` | robots.txt 解析、per-origin 快取與允許判定 |
 | 爬蟲 | `web_harvester/crawler/site_crawler.py` | 來源選擇、URL/body 填值、列表與文章解析 |
 | 分類 | `web_harvester/crawler/classifier.py` | 由 html / url / json / keyword 規則推導 category 與 tags |
@@ -38,8 +39,26 @@ web-harvester（或 python main.py）
 `--all-sites` 對每個站點各自建立一個 engine 與 crawler，因此儲存後端、去重狀態與統計互不干擾；
 單一 SiteCrawler 的 `_selected_list_cfg` 快取與 `_current_source` 也不會跨站污染。
 
-同步模式以 `deque` 搭配單執行緒迴圈，並在每次請求間套用 `download_delay`。
-非同步模式以固定數量 worker 共用 `asyncio.Queue`，去重與停止條件透過 `stop_event` 收斂。
+同步模式以 `deque` 搭配單執行緒迴圈；非同步模式以固定數量 worker 共用 `asyncio.Queue`，
+去重與停止條件透過 `stop_event` 收斂。兩者共同的節流與逾時規則：
+
+- **per-domain 限速**：`DomainRateLimiter` 以 hostname 為鍵記錄上次送出時間，
+  同一網域的相鄰請求至少間隔 `engine.download_delay` 秒；不同網域各自獨立，因此非同步模式的並行度在跨網域時仍保留。
+  限速發生在每次網路嘗試前（含重試），robots.txt 的抓取不經此限流器（每次執行每個 origin 最多一次）。
+- **逾時預算**：`limits.timeout` 轉為單調時鐘上的絕對 deadline，每個請求的 `Request.timeout` 取
+  `min(engine.request_timeout, 剩餘預算)`，因此單一請求不會超出整體預算。非同步模式額外以
+  `asyncio.wait_for` 取消仍在傳輸中的請求；同步模式的阻塞呼叫無法中斷，但誤差已被限制在剩餘預算內。
+- **max_items**：同步模式在下一個請求取出前檢查；非同步模式在派發前檢查，並在達標時設定
+  `_stop_fetching`，讓已排隊的請求在限流器等待結束後直接丟棄、不送出。
+
+## HTTP client 生命週期
+
+`CurlCffiClient` 與 `HttpxClient` 都採延遲建立、重複使用的策略：
+
+- 同步 session 於第一次 `fetch_sync` 建立，之後沿用；`close()` 關閉並清空
+- 非同步 session 於第一次 `fetch_async` 建立；`_run_async_safely` 在事件迴圈內呼叫 `aclose()`，
+  因為非同步 client 必須在建立它的事件迴圈中關閉
+- per-request 的 headers、cookies、params 每次傳入，不寫入 session 預設值，避免站點之間互相污染
 
 ## 來源選擇（`_select_list_cfg`）
 
