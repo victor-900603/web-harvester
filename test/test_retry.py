@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
-from src.core.retry import (
+from web_harvester.core.retry import (
     BackoffPolicy,
     is_retryable,
     parse_retry_after,
@@ -109,7 +109,7 @@ class TestBackoffPolicy:
         assert policy.delay(10) == 5.0
 
     def test_full_jitter_range(self, monkeypatch):
-        monkeypatch.setattr("src.core.retry.random.uniform", lambda a, b: b)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", lambda a, b: b)
         policy = BackoffPolicy(base_delay=2, max_delay=100, multiplier=2, jitter="full")
         assert policy.delay(1) == 2.0
 
@@ -117,30 +117,30 @@ class TestBackoffPolicy:
         def boom(a, b):
             raise AssertionError("random should not be called")
 
-        monkeypatch.setattr("src.core.retry.random.uniform", boom)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", boom)
         policy = BackoffPolicy(base_delay=3, jitter="none")
         assert policy.delay(1) == 3.0
 
     def test_respect_retry_after_uses_header(self, monkeypatch):
-        monkeypatch.setattr("src.core.retry.random.uniform", lambda a, b: 0.0)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", lambda a, b: 0.0)
         policy = BackoffPolicy(base_delay=1, max_delay=100, multiplier=2, jitter="none")
         exc = _status_error(429, {"Retry-After": "10"})
         assert policy.delay(1, exc) == 10.0
 
     def test_retry_after_capped_by_max_delay(self, monkeypatch):
-        monkeypatch.setattr("src.core.retry.random.uniform", lambda a, b: 0.0)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", lambda a, b: 0.0)
         policy = BackoffPolicy(base_delay=1, max_delay=5, multiplier=2, jitter="none")
         exc = _status_error(429, {"Retry-After": "600"})
         assert policy.delay(1, exc) == 5.0
 
     def test_retry_after_ignored_when_disabled(self, monkeypatch):
-        monkeypatch.setattr("src.core.retry.random.uniform", lambda a, b: 0.0)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", lambda a, b: 0.0)
         policy = BackoffPolicy(base_delay=1, max_delay=100, jitter="none", respect_retry_after=False)
         exc = _status_error(429, {"Retry-After": "10"})
         assert policy.delay(1, exc) == 1.0
 
     def test_retry_after_does_not_reduce_computed_delay(self, monkeypatch):
-        monkeypatch.setattr("src.core.retry.random.uniform", lambda a, b: 0.0)
+        monkeypatch.setattr("web_harvester.core.retry.random.uniform", lambda a, b: 0.0)
         policy = BackoffPolicy(base_delay=20, max_delay=100, multiplier=2, jitter="none")
         exc = _status_error(429, {"Retry-After": "3"})
         assert policy.delay(1, exc) == 20.0

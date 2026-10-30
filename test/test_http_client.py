@@ -6,13 +6,13 @@ import types
 import httpx
 import pytest
 
-from src.core import Request
-from src.core.http_client import (
+from web_harvester.core import Request
+from web_harvester.core.http_client import (
     CurlCffiClient,
     HttpxClient,
     build_http_client,
 )
-from src.utils.config import DEFAULT_SETTINGS_SCHEMA, ConfigValidationError, validate_config
+from web_harvester.utils.config import ConfigValidationError, settings_schema_path, validate_config
 
 
 class TestBuildHttpClient:
@@ -80,7 +80,7 @@ class TestSettingsSchemaValidation:
             "request": {"http_client": "curl_cffi", "impersonate": "chrome131", "ja3": "abc", "akamai": "def"},
             "logging": {"level": "INFO"},
         }
-        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+        validate_config(data, settings_schema_path(), "settings")
 
     def test_valid_httpx_settings_pass(self):
         data = {
@@ -89,7 +89,7 @@ class TestSettingsSchemaValidation:
             "request": {"http_client": "httpx", "verify_ssl": False, "user_agent": "test/1.0"},
             "logging": {"level": "INFO"},
         }
-        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+        validate_config(data, settings_schema_path(), "settings")
 
     def test_empty_impersonate_allowed(self):
         data = {
@@ -98,7 +98,7 @@ class TestSettingsSchemaValidation:
             "request": {"impersonate": ""},
             "logging": {"level": "INFO"},
         }
-        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+        validate_config(data, settings_schema_path(), "settings")
 
     def test_invalid_impersonate_rejected(self):
         data = {
@@ -108,7 +108,7 @@ class TestSettingsSchemaValidation:
             "logging": {"level": "INFO"},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+            validate_config(data, settings_schema_path(), "settings")
 
     def test_invalid_http_client_rejected(self):
         data = {
@@ -118,7 +118,7 @@ class TestSettingsSchemaValidation:
             "logging": {"level": "INFO"},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+            validate_config(data, settings_schema_path(), "settings")
 
 
 class TestHttpxClient:

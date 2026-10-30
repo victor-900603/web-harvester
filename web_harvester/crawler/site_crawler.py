@@ -432,7 +432,8 @@ class SiteCrawler(BaseCrawler):
                     headers=headers,
                     cookies=cookies,
                     callback="parse_article",
-                    meta={"list_url": response.url}
+                    meta={"list_url": response.url},
+                    is_article=True,
                 )
             else:
                 yield Item(
@@ -484,6 +485,7 @@ class SiteCrawler(BaseCrawler):
                     cookies=cookies,
                     callback="parse_article",
                     meta={"list_data": item_data, "list_url": response.url},
+                    is_article=True,
                 )
             else:
                 yield Item(

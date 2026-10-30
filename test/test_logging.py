@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from src.utils.logging import setup_logging
+from web_harvester.utils.logging import setup_logging
 
 
 @pytest.fixture(autouse=True)

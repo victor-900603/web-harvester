@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 
 from conftest import make_item
 
-from src.core import Item
-from src.storage.database import close_database, get_session
-from src.storage.db_storage import DatabaseStorage
-from src.storage.json_storage import JSONStorage
-from src.storage.models import Article
+from web_harvester.core import Item
+from web_harvester.storage.database import close_database, get_session
+from web_harvester.storage.db_storage import DatabaseStorage
+from web_harvester.storage.json_storage import JSONStorage
+from web_harvester.storage.models import Article
 
 
 class TestJSONStorage:

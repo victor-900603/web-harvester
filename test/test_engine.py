@@ -6,10 +6,10 @@ import time
 import httpx
 import pytest
 
-from src.core import Item, Request
-from src.core.engine import CrawlerEngine, build_engine
-from src.crawler import BaseCrawler
-from src.storage import BaseStorage
+from web_harvester.core import Item, Request
+from web_harvester.core.engine import CrawlerEngine, build_engine
+from web_harvester.crawler import BaseCrawler
+from web_harvester.storage import BaseStorage
 
 
 class FakeCrawler(BaseCrawler):
@@ -34,7 +34,15 @@ class FakeCrawler(BaseCrawler):
         yield Item(data={"title": response.url}, source=self.name, url=response.url)
 
 
-def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None, respect_robots=False, skip_seen_urls=None):
+def make_engine(
+    mode="sync",
+    concurrency=1,
+    max_retries=1,
+    retry=None,
+    respect_robots=False,
+    skip_seen_urls=None,
+    dry_run=False,
+):
     engine_cfg = {
         "mode": mode,
         "max_concurrency": concurrency,
@@ -47,6 +55,7 @@ def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None, respect_r
     return CrawlerEngine(
         {"engine": engine_cfg, "request": {"respect_robots": respect_robots}},
         skip_seen_urls=skip_seen_urls,
+        dry_run=dry_run,
     )
 
 
@@ -199,7 +208,7 @@ class TestSyncLimits:
 
     def test_fetch_sync_sets_body_for_json(self, monkeypatch):
         # Engine now delegates to http_client; test via httpx path explicitly
-        from src.core.http_client import HttpxClient
+        from web_harvester.core.http_client import HttpxClient
 
         class FakeResponse:
             status_code = 200
@@ -267,7 +276,7 @@ class TestSyncLimits:
         monkeypatch.setitem(sys.modules, "curl_cffi", fake_curl)
         monkeypatch.setitem(sys.modules, "curl_cffi.requests", fake_crequests)
 
-        from src.core.http_client import CurlCffiClient
+        from web_harvester.core.http_client import CurlCffiClient
 
         curl_client = CurlCffiClient(impersonate="chrome131")
         engine2 = make_engine("sync")
@@ -417,7 +426,7 @@ class TestBuildEngine:
 
 
 def _response(request):
-    from src.core import Response
+    from web_harvester.core import Response
 
     return Response(url=request.url, status_code=200, text="<html></html>", request=request)
 
@@ -632,3 +641,59 @@ class TestBuildEngineSkipSeen:
         engine = build_engine(settings)
         assert engine._skip_seen_urls is False
         engine.close()
+
+
+class ArticleCrawler(BaseCrawler):
+    """Crawler whose list page emits article requests."""
+
+    name = "article-fake"
+
+    def start_requests(self):
+        yield Request(url="https://e.com/list", callback="parse_list")
+
+    def parse(self, response):
+        return self.parse_article(response)
+
+    def parse_list(self, response):
+        yield Request(url="https://e.com/a1", callback="parse_article", is_article=True)
+        yield Request(url="https://e.com/a2", callback="parse_article", is_article=True)
+
+    def parse_article(self, response):
+        yield Item(data={"title": response.url}, source=self.name, url=response.url)
+
+
+class TestDryRun:
+    def test_sync_skips_article_requests(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", dry_run=True)
+        items = engine.run(ArticleCrawler())
+        assert calls == ["https://e.com/list"]
+        assert items == []
+        assert engine.skipped_articles == 2
+
+    def test_sync_fetches_articles_without_dry_run(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync")
+        items = engine.run(ArticleCrawler())
+        assert calls == ["https://e.com/list", "https://e.com/a1", "https://e.com/a2"]
+        assert len(items) == 2
+        assert engine.skipped_articles == 0
+
+    def test_async_skips_article_requests(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", _counting_async_fetch(calls))
+        engine = make_engine("async", dry_run=True)
+        items = engine.run(ArticleCrawler())
+        assert calls == ["https://e.com/list"]
+        assert items == []
+        assert engine.skipped_articles == 2
+
+    def test_is_article_defaults_to_false(self):
+        assert Request(url="https://e.com/a").is_article is False
+
+    def test_copy_preserves_is_article(self):
+        original = Request(url="https://e.com/a", is_article=True)
+        assert original.copy().is_article is True
+        assert Request(url="https://e.com/a").copy().is_article is False

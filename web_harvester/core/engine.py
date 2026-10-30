@@ -36,13 +36,21 @@ def _request_key(request: Request) -> tuple:
 
 class CrawlerEngine:
     """The core engine that runs the crawling process."""
-    def __init__(self, settings: Dict[str, Any] | Settings, *, skip_seen_urls: Optional[bool] = None):
+    def __init__(
+        self,
+        settings: Dict[str, Any] | Settings,
+        *,
+        skip_seen_urls: Optional[bool] = None,
+        dry_run: bool = False,
+    ):
         """Initialize the crawler engine with the given settings.
 
         Args:
             settings (Dict[str, Any] | Settings): A dictionary of engine configuration settings.
             skip_seen_urls (Optional[bool]): Override for ``engine.skip_seen_urls``
                 (the CLI ``--skip-seen`` flag); None keeps the configured value.
+            dry_run (bool): Crawl list pages and report the article pages that
+                would be fetched, without requesting any of them.
         """
         self.settings = settings or Settings()
         self.storages: List[BaseStorage] = []
@@ -75,6 +83,10 @@ class CrawlerEngine:
         self._skipped_known = 0
         self._skipped_robots = 0
 
+        # dry run: crawl lists, never fetch article pages
+        self._dry_run = dry_run
+        self._skipped_articles = 0
+
     def add_storage(self, storage: BaseStorage) -> CrawlerEngine:
         """Add a storage backend to the engine.
 
@@ -100,6 +112,7 @@ class CrawlerEngine:
         logger.info(f"Starting crawler: {crawler.name} in {self._mode} mode")
         self._skipped_known = 0
         self._skipped_robots = 0
+        self._skipped_articles = 0
         self._robots_enabled = self._resolve_respect_robots(crawler)
         self._known_urls = self._load_known_urls() if self._skip_seen_urls else set()
         try:
@@ -220,6 +233,11 @@ class CrawlerEngine:
                 logger.debug(f"Skipping known URL: {request.url}")
                 continue
 
+            if self._dry_run and request.is_article:
+                self._skipped_articles += 1
+                logger.debug(f"Dry run: not fetching article page {request.url}")
+                continue
+
             if not self._robots_allows(request.url):
                 continue
 
@@ -247,11 +265,33 @@ class CrawlerEngine:
             if self._download_delay > 0:
                 time.sleep(self._download_delay)
 
-        logger.info(
-            f"Total requests made: {total_requests}, total items collected: {len(items)}, "
+        self._log_summary(total_requests, len(items))
+        return items
+
+    def _log_summary(self, total_requests: int, item_count: int) -> None:
+        """Log the counters gathered during a run."""
+        message = (
+            f"Total requests made: {total_requests}, total items collected: {item_count}, "
             f"skipped known URLs: {self._skipped_known}, skipped by robots.txt: {self._skipped_robots}"
         )
-        return items
+        if self._dry_run:
+            message += f", article pages skipped (dry run): {self._skipped_articles}"
+        logger.info(message)
+
+    @property
+    def skipped_known(self) -> int:
+        """Number of requests skipped because their URL is already stored."""
+        return self._skipped_known
+
+    @property
+    def skipped_robots(self) -> int:
+        """Number of requests skipped because robots.txt disallows them."""
+        return self._skipped_robots
+
+    @property
+    def skipped_articles(self) -> int:
+        """Number of article pages skipped by a dry run."""
+        return self._skipped_articles
 
     def _process_sync(self, request: Request) -> Optional[Response]:
         """Process a single request in synchronous mode with retries.
@@ -350,6 +390,11 @@ class CrawlerEngine:
                         logger.debug(f"Skipping known URL: {request.url}")
                         continue
 
+                    if self._dry_run and request.is_article:
+                        self._skipped_articles += 1
+                        logger.debug(f"Dry run: not fetching article page {request.url}")
+                        continue
+
                     if not await self._robots_allows_async(request.url):
                         continue
 
@@ -393,10 +438,7 @@ class CrawlerEngine:
         for w in workers:
             w.cancel()
 
-        logger.info(
-            f"Total requests made: {total_requests}, total items collected: {len(items)}, "
-            f"skipped known URLs: {self._skipped_known}, skipped by robots.txt: {self._skipped_robots}"
-        )
+        self._log_summary(total_requests, len(items))
         return items
 
     async def _process_async(self, request: Request) -> Optional[Response]:
@@ -452,8 +494,13 @@ class CrawlerEngine:
 
         logger.info("Crawler engine resources have been cleaned up.")
 
-def build_engine(settings: Settings, *, skip_seen_urls: Optional[bool] = None) -> CrawlerEngine:
-    engine = CrawlerEngine(settings, skip_seen_urls=skip_seen_urls)
+def build_engine(
+    settings: Settings,
+    *,
+    skip_seen_urls: Optional[bool] = None,
+    dry_run: bool = False,
+) -> CrawlerEngine:
+    engine = CrawlerEngine(settings, skip_seen_urls=skip_seen_urls, dry_run=dry_run)
 
     # Storage
     json_cfg = settings.get("json_storage", {})

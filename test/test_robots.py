@@ -5,10 +5,10 @@ import asyncio
 import httpx
 import pytest
 
-from src.core.http_client.base import BaseHttpClient
-from src.core.request import Request
-from src.core.response import Response
-from src.core.robots import RobotsPolicy
+from web_harvester.core.http_client.base import BaseHttpClient
+from web_harvester.core.request import Request
+from web_harvester.core.response import Response
+from web_harvester.core.robots import RobotsPolicy
 
 
 class FakeClient(BaseHttpClient):
@@ -121,7 +121,7 @@ class TestAllowed:
 
         client = FakeClient({"https://example.com/robots.txt": (200, DISALLOW_PRIVATE)})
         policy = make_policy(client)
-        with caplog.at_level(logging.INFO, logger="src.core.robots"):
+        with caplog.at_level(logging.INFO, logger="web_harvester.core.robots"):
             policy.allowed("https://example.com/private/1")
         assert any("robots.txt disallows" in rec.getMessage() for rec in caplog.records)
 

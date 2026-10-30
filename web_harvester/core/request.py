@@ -19,6 +19,8 @@ class Request:
         meta: A dictionary of arbitrary metadata to associate with the request.
         callback: The name of the callback function to call with the response.
         errback: The name of the error callback function to call if the request fails.
+        is_article: Whether the request targets an article page. Dry runs use it
+            to skip per-article fetches while still crawling the list pages.
     """
 
     url: str
@@ -31,6 +33,7 @@ class Request:
     meta: Dict[str, Any] = field(default_factory=dict)
     callback: Optional[str] = None
     errback: Optional[str] = None
+    is_article: bool = False
 
     def copy(self) -> Request:
         return Request(
@@ -43,7 +46,8 @@ class Request:
             json_body=self.json_body,
             meta=self.meta.copy(),
             callback=self.callback,
-            errback=self.errback
+            errback=self.errback,
+            is_article=self.is_article,
         )
 
     def __repr__(self):

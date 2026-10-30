@@ -5,8 +5,8 @@ from datetime import datetime
 
 from conftest import make_response
 
-from src.core import Item, Request, Response
-from src.crawler import SiteCrawler
+from web_harvester.core import Item, Request, Response
+from web_harvester.crawler import SiteCrawler
 
 
 class TestStartRequests:
@@ -303,7 +303,7 @@ class TestParseList:
             "<article class='news-item'><a href='/news/1'>One</a></article>"
             "<article class='news-item'><a href='/news/2'>Two</a></article>",
         )
-        with caplog.at_level(logging.INFO, logger="src.crawler.site_crawler"):
+        with caplog.at_level(logging.INFO, logger="web_harvester.crawler.site_crawler"):
             results = list(crawler.parse_list(resp))
         assert len(results) == 2
         assert any(
@@ -317,7 +317,7 @@ class TestParseList:
             "https://example.com/news?page=1",
             "<div>no news here</div>",
         )
-        with caplog.at_level(logging.INFO, logger="src.crawler.site_crawler"):
+        with caplog.at_level(logging.INFO, logger="web_harvester.crawler.site_crawler"):
             list(crawler.parse_list(resp))
         assert any("-> 0 link(s)" in rec.getMessage() for rec in caplog.records)
 
@@ -334,6 +334,7 @@ class TestParseList:
         assert results[0].url == "https://example.com/news/1"
         assert results[1].url == "https://example.com/news/2"
         assert all(r.callback == "parse_article" for r in results)
+        assert all(r.is_article for r in results)
 
     def test_html_list_without_article_config_yields_items(self, sample_site_config):
         sample_site_config["article_page"] = {}
@@ -455,6 +456,7 @@ class TestParseList:
         )
         results = list(crawler.parse_list(resp))
         assert all(r.callback == "parse_article" for r in results)
+        assert all(r.is_article for r in results)
 
     def test_cursor_pagination_stops_without_next_cursor(self, sample_site_config):
         self._cursor_config(sample_site_config)
@@ -472,6 +474,7 @@ class TestParseList:
         )
         results = list(crawler.parse_list(resp))
         assert all(r.callback == "parse_article" for r in results)
+        assert all(r.is_article for r in results)
 
     def test_json_list_object_values_are_iterated(self, sample_site_config):
         sample_site_config["list_page"] = {

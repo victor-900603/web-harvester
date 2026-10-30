@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core import Item, Response
+from web_harvester.core import Item, Response
 
 
 @pytest.fixture

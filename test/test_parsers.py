@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.parsers import HTMLParser, JSONParser
+from web_harvester.parsers import HTMLParser, JSONParser
 
 
 class TestHTMLParser:

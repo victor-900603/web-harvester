@@ -1,20 +1,2 @@
-# General dependencies
-colorlog==6.7.0
-PyYAML>=5.4.0
-jsonschema>=4.0.0
-
-# HTTP
-httpx>=0.24.0
-curl_cffi>=0.7.0
-
-# HTML parsing
-beautifulsoup4==4.14.0
-lxml>=6.0.0
-
-# Asynchronous task queue
-# 目前程式碼未引用，保留供日後分散式任務整合；若要縮減安裝體積可整段移除。
-celery>=5.3.0
-redis>=5.0.0
-
-# Database
-sqlalchemy>=2.0.0
+# 執行期依賴的權威定義在 pyproject.toml；本檔僅作為 pip install -r 的入口。
+.

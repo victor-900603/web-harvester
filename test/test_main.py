@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from main import build_cli_limits, build_parser
+from web_harvester.cli import build_cli_limits, build_parser
 
 
 class TestBuildParser:

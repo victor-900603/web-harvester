@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as json_lib
 from datetime import datetime, timezone
 
-from src.core import Item, Request, Response
+from web_harvester.core import Item, Request, Response
 
 
 class TestRequest:

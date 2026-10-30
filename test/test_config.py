@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from src.utils.config import (
-    DEFAULT_SITE_SCHEMA,
+from web_harvester.utils import config as config_module
+from web_harvester.utils.config import (
+    ConfigDirNotFound,
     ConfigValidationError,
     Settings,
+    get_all_site_ids,
     load_site_config,
     merge_limits,
+    resolve_config_dir,
+    settings_schema_path,
+    site_schema_path,
     validate_config,
 )
 
@@ -63,7 +68,6 @@ class TestSettings:
 
 class TestValidateConfig:
     def test_valid_settings_passes(self):
-        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
 
         data = {
             "app": {"name": "x", "version": "1"},
@@ -72,10 +76,9 @@ class TestValidateConfig:
             "json_storage": {"enabled": True},
             "database": {"enabled": True},
         }
-        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+        validate_config(data, settings_schema_path(), "settings")
 
     def test_valid_retry_block_passes(self):
-        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
 
         data = {
             "app": {"name": "x", "version": "1"},
@@ -91,10 +94,9 @@ class TestValidateConfig:
             },
             "logging": {"level": "INFO"},
         }
-        validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+        validate_config(data, settings_schema_path(), "settings")
 
     def test_invalid_retry_jitter_rejected(self):
-        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
 
         data = {
             "app": {"name": "x", "version": "1"},
@@ -102,10 +104,9 @@ class TestValidateConfig:
             "logging": {"level": "INFO"},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+            validate_config(data, settings_schema_path(), "settings")
 
     def test_retry_unknown_key_rejected(self):
-        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
 
         data = {
             "app": {"name": "x", "version": "1"},
@@ -113,7 +114,7 @@ class TestValidateConfig:
             "logging": {"level": "INFO"},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+            validate_config(data, settings_schema_path(), "settings")
 
     def test_unknown_key_rejected(self):
         data = {
@@ -122,10 +123,9 @@ class TestValidateConfig:
             "logging": {"level": "INFO"},
             "typo_key": True,
         }
-        from src.utils.config import DEFAULT_SETTINGS_SCHEMA
 
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SETTINGS_SCHEMA, "settings")
+            validate_config(data, settings_schema_path(), "settings")
 
     def test_invalid_base_url_rejected(self):
         data = {
@@ -134,12 +134,12 @@ class TestValidateConfig:
             "list_page": {"sources": [{"url": "https://example.com"}]},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_missing_base_url_rejected(self):
         data = {"name": "x", "list_page": {"sources": [{"url": "https://example.com"}]}}
         with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
         assert "base_url" in str(exc_info.value)
 
     def test_mixed_selector_styles_rejected(self):
@@ -162,12 +162,12 @@ class TestValidateConfig:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_error_message_contains_path(self):
         data = {"name": "x", "base_url": 123}
         with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
         assert "base_url" in str(exc_info.value)
 
     def test_html_field_missing_selector_rejected(self):
@@ -182,7 +182,7 @@ class TestValidateConfig:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_json_field_missing_path_rejected(self):
         data = {
@@ -196,7 +196,7 @@ class TestValidateConfig:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
 
 class TestCategorySchema:
@@ -209,7 +209,7 @@ class TestCategorySchema:
                 "default": "其他",
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_valid_category_all_source_types_pass(self):
         data = {
@@ -227,7 +227,7 @@ class TestCategorySchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_category_without_sources_rejected(self):
         data = {
@@ -236,7 +236,7 @@ class TestCategorySchema:
             "category": {"default": "其他"},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_url_source_missing_regex_rejected(self):
         data = {
@@ -245,7 +245,7 @@ class TestCategorySchema:
             "category": {"sources": [{"source": "url"}]},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_html_source_missing_selector_rejected(self):
         data = {
@@ -254,7 +254,7 @@ class TestCategorySchema:
             "category": {"sources": [{"source": "html"}]},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_unknown_source_type_rejected(self):
         data = {
@@ -263,7 +263,7 @@ class TestCategorySchema:
             "category": {"sources": [{"source": "bogus", "foo": "bar"}]},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_valid_tags_passes(self):
         data = {
@@ -273,7 +273,7 @@ class TestCategorySchema:
                 "sources": [{"source": "html", "selector": 'meta[name="news_keywords"]', "attr": "content", "split": ","}],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_tags_unknown_key_rejected(self):
         data = {
@@ -282,7 +282,7 @@ class TestCategorySchema:
             "tags": {"sources": [{"source": "html", "selector": 'meta[name="section"]', "attr": "content"}], "extra": True},
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
 
 class TestListPageSourcesSchema:
@@ -307,7 +307,7 @@ class TestListPageSourcesSchema:
                 "category_default": "0",
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_source_full_extract_valid(self):
         data = {
@@ -327,7 +327,7 @@ class TestListPageSourcesSchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_body_and_json_body_valid(self):
         data = {
@@ -345,7 +345,7 @@ class TestListPageSourcesSchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_json_body_wrong_type_rejected(self):
         data = {
@@ -363,7 +363,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_body_wrong_type_rejected(self):
         data = {
@@ -381,7 +381,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_url_filter_valid(self):
         data = {
@@ -401,7 +401,7 @@ class TestListPageSourcesSchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_url_filter_wrong_type_rejected(self):
         data = {
@@ -422,7 +422,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_missing_type_rejected(self):
         data = {
@@ -435,7 +435,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_missing_extract_rejected(self):
         data = {
@@ -446,7 +446,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_type_html_with_json_extract_rejected(self):
         data = {
@@ -463,7 +463,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_type_json_with_html_extract_rejected(self):
         data = {
@@ -480,7 +480,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_list_page_legacy_keys_rejected(self):
         data = {
@@ -494,7 +494,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_pagination_start_zero_valid(self):
         data = {
@@ -511,7 +511,7 @@ class TestListPageSourcesSchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_pagination_cursor_valid(self):
         data = {
@@ -533,7 +533,7 @@ class TestListPageSourcesSchema:
                 ],
             },
         }
-        validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+        validate_config(data, site_schema_path(), "site")
 
     def test_pagination_cursor_without_next_cursor_path_rejected(self):
         data = {
@@ -551,7 +551,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_pagination_invalid_type_rejected(self):
         data = {
@@ -569,7 +569,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_missing_sources_rejected(self):
         data = {
@@ -581,7 +581,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_empty_sources_rejected(self):
         data = {
@@ -593,7 +593,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_without_url_rejected(self):
         data = {
@@ -605,7 +605,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_source_extra_property_rejected(self):
         data = {
@@ -617,7 +617,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
     def test_categories_non_string_value_rejected(self):
         data = {
@@ -635,7 +635,7 @@ class TestListPageSourcesSchema:
             },
         }
         with pytest.raises(ConfigValidationError):
-            validate_config(data, DEFAULT_SITE_SCHEMA, "site")
+            validate_config(data, site_schema_path(), "site")
 
 
 class TestLoadSiteConfig:
@@ -699,3 +699,69 @@ class TestSettingsLimits:
         assert limits["max_pages"] == 3
         assert limits["stop_on_duplicate"] is False
         assert limits["timeout"] == 180
+
+
+class TestConfigDirResolution:
+    def test_explicit_dir_wins(self, tmp_path):
+        (tmp_path / "settings.yaml").write_text("app: {}\n", encoding="utf-8")
+        assert resolve_config_dir(tmp_path) == tmp_path.resolve()
+
+    def test_explicit_dir_without_settings_fails(self, tmp_path):
+        with pytest.raises(ConfigDirNotFound) as exc:
+            resolve_config_dir(tmp_path)
+        assert "settings.yaml" in str(exc.value)
+
+    def test_env_var_is_used(self, tmp_path, monkeypatch):
+        env_dir = tmp_path / "env-config"
+        env_dir.mkdir()
+        (env_dir / "settings.yaml").write_text("app: {}\n", encoding="utf-8")
+        monkeypatch.setattr(config_module, "USER_CONFIG_DIR", tmp_path / "user")
+        monkeypatch.setenv(config_module.ENV_CONFIG_DIR, str(env_dir))
+        monkeypatch.chdir(tmp_path)
+        assert resolve_config_dir() == env_dir.resolve()
+
+    def test_parent_directory_is_searched(self, tmp_path, monkeypatch):
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        (config_dir / "settings.yaml").write_text("app: {}\n", encoding="utf-8")
+        nested = tmp_path / "pkg" / "deep"
+        nested.mkdir(parents=True)
+        monkeypatch.setattr(config_module, "USER_CONFIG_DIR", tmp_path / "user")
+        monkeypatch.delenv(config_module.ENV_CONFIG_DIR, raising=False)
+        monkeypatch.chdir(nested)
+        assert resolve_config_dir() == config_dir.resolve()
+
+    def test_user_config_dir_is_last_resort(self, tmp_path, monkeypatch):
+        user_dir = tmp_path / "user"
+        user_dir.mkdir()
+        (user_dir / "settings.yaml").write_text("app: {}\n", encoding="utf-8")
+        monkeypatch.setattr(config_module, "USER_CONFIG_DIR", user_dir)
+        monkeypatch.delenv(config_module.ENV_CONFIG_DIR, raising=False)
+        monkeypatch.chdir(tmp_path)
+        assert resolve_config_dir() == user_dir.resolve()
+
+    def test_missing_everywhere_raises(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "USER_CONFIG_DIR", tmp_path / "user")
+        monkeypatch.delenv(config_module.ENV_CONFIG_DIR, raising=False)
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ConfigDirNotFound):
+            resolve_config_dir()
+
+    def test_settings_uses_resolved_dir(self):
+        settings = Settings()
+        assert settings.config_path == settings.config_dir / "settings.yaml"
+        assert settings.config_dir.is_dir()
+
+    def test_schema_paths_point_to_files(self):
+        assert settings_schema_path().is_file()
+        assert site_schema_path().is_file()
+
+    def test_site_ids_read_from_given_dir(self, tmp_path):
+        (tmp_path / "settings.yaml").write_text("app: {}\n", encoding="utf-8")
+        sites = tmp_path / "sites"
+        sites.mkdir()
+        (sites / "b.yaml").write_text("name: b\n", encoding="utf-8")
+        (sites / "a.yml").write_text("name: a\n", encoding="utf-8")
+        (sites / "notes.txt").write_text("ignored\n", encoding="utf-8")
+        assert get_all_site_ids(config_dir=tmp_path) == ["a", "b"]
+
