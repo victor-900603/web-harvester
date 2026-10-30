@@ -15,6 +15,7 @@ engine:
   request_timeout: 30
   download_delay: 1.0
   max_retries: 3              # 失敗請求最大嘗試次數（僅可重試錯誤）
+  skip_seen_urls: true        # 啟動時略過儲存後端已存的 URL
   retry:                      # 指數回退設定
     base_delay: 1.0           # 第一次重試前等待秒數
     max_delay: 30.0           # 單次回退延遲上限（秒）
@@ -25,6 +26,7 @@ engine:
 request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true
+  respect_robots: true        # 請求前檢查 robots.txt；站點可覆寫
   http_client: "curl_cffi"    # curl_cffi（預設，支援 TLS 指紋） | httpx（備援）
   impersonate: "chrome131"    # 瀏覽器偽裝，需 http_client=curl_cffi；"" 表示停用
   # ja3: ""                   # 自訂 JA3，僅 impersonate="" 時生效
@@ -64,6 +66,7 @@ category_normalization: {}
 | `engine.retry.multiplier` | 每次嘗試的指數成長倍率 | `2.0` |
 | `engine.retry.jitter` | 抖動模式：`none` / `full` / `equal` | `full` |
 | `engine.retry.respect_retry_after` | 是否尊重回應的 `Retry-After` 標頭 | `true` |
+| `engine.skip_seen_urls` | 啟動時讀取各儲存後端的 `known_urls()`，略過已存的 URL；CLI `--skip-seen` / `--no-skip-seen` 可臨時覆寫 | `true` |
 
 #### 重試與指數回退行為
 
@@ -79,6 +82,7 @@ category_normalization: {}
 |------|------|--------|
 | `request.user_agent` | 全域請求的 User-Agent，未啟用 impersonate 時套用到所有請求；啟用 impersonate 時由瀏覽器指紋覆蓋 | `web-harvester/1.0` |
 | `request.verify_ssl` | 是否驗證 SSL 憑證（僅開發測試時關閉） | `true` |
+| `request.respect_robots` | 請求前檢查目標網域的 robots.txt；站點 `request.respect_robots` 可覆寫本站行為 | `true` |
 | `request.http_client` | HTTP 實作：`curl_cffi`（預設，支援 TLS 指紋偽裝）或 `httpx`（備援，無偽裝）；`curl_cffi` 未安裝時自動回落至 `httpx` | `curl_cffi` |
 | `request.impersonate` | 瀏覽器偽裝目標，僅 `http_client=curl_cffi` 時生效；`""` 表示停用 | `chrome131` |
 | `request.ja3` | 自訂 JA3 字串，僅 `impersonate=""` 且 `http_client=curl_cffi` 時生效；有 impersonate 時被忽略並記 warning | - |
@@ -92,7 +96,7 @@ category_normalization: {}
 
 | 欄位 | 說明 | 預設值 |
 |------|------|--------|
-| `limits.max_items` | 最大爬取筆數，達到即停止 | `100` |
+| `limits.max_items` | 最大爬取筆數，達到即停止；非同步模式因多個 worker 並行，實際收集數可能略超過此值 | `100` |
 | `limits.max_pages` | 最大爬取頁數上限（唯一權威值，`pagination` 只管 `enabled`/`type`/`start`/`next_cursor_path`） | `3` |
 | `limits.stop_on_duplicate` | 遇到重複 URL 即停止；未開啟則跳過繼續 | `false` |
 | `limits.timeout` | 整體爬取時間上限（秒） | `180` |
@@ -123,6 +127,26 @@ python main.py --site udn_news --no-stop-on-duplicate
 | `--max-pages N` | `limits.max_pages` | 爬取列表頁數上限（>= 1） |
 | `--stop-on-duplicate` / `--no-stop-on-duplicate` | `limits.stop_on_duplicate` | 遇到重複 URL 是否停止 |
 | `--timeout SEC` | `limits.timeout` | 整體爬取逾時（秒，> 0） |
+| `--skip-seen` / `--no-skip-seen` | `engine.skip_seen_urls` | 是否略過儲存後端已存的 URL |
+
+## 增量爬取
+
+`engine.skip_seen_urls` 預設為 `true`。引擎在 `run()` 開頭 union 各儲存後端的 `known_urls()`，
+列表解析出的 URL 若已存在則不發出請求，並計入統計的 `skipped known URLs`。
+
+- 只有資料庫後端能提供歷史網址；JSON 後端為 batch 寫檔，`known_urls()` 回空集合。
+- 搭配 `limits.stop_on_duplicate: true` 時，遇到第一筆已知 URL 即中止該輪，可用最少請求補抓最新文章。
+- CLI `--skip-seen` / `--no-skip-seen` 僅覆寫本次執行的行為。
+
+## robots.txt 檢查
+
+`request.respect_robots` 預設為 `true`，站點層級的 `request.respect_robots` 優先於全域設定。
+實作位於 `src/core/robots.py`。
+
+- 以 origin（scheme + host + port）為快取單位，同一次執行對每個 origin 只抓一次 robots.txt。
+- robots.txt 回 4xx 時視為允許全部；回 5xx 或連線失敗時記 warning、跳過該次請求，且不保留結果（下次執行重新嘗試）。
+- 被拒絕的 URL 計入統計的 `skipped by robots.txt`，不會寫入儲存後端。
+- 未實作 `Crawl-delay` 覆寫；請求間隔仍由 `engine.download_delay` 決定。
 
 ## Schema 驗證
 

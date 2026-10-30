@@ -45,3 +45,10 @@ JSON 為 batch 模式，`close` 時才寫檔，檔名為 `{source}_{YYYYmmdd_HHM
 ## 去重機制
 
 寫入前先以 `url` 查詢是否已存在（`data.url` 優先於 `item.url`），存在則跳過；`url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
+
+## 增量爬取支援
+
+`BaseStorage.known_urls() -> set[str]` 供引擎在啟動時取得已存網址（`engine.skip_seen_urls`，預設開啟）：
+
+- 資料庫後端以單次 `SELECT url FROM articles` 查詢，失敗時記錄 error 並回傳空集合。
+- JSON 後端為 batch 寫檔，無既有資料可查，固定回傳空集合。

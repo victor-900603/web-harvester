@@ -170,6 +170,7 @@ CLI 僅本次生效，不寫回檔案，詳見 [global-config.md](global-config.
 |------|------|------|------|------|
 | `request.headers` | `object<string,string>` | 否 | `{}` | 附加至本站所有請求的標頭（列表與文章共用） |
 | `request.cookies` | `object<string,string>` | 否 | `{}` | 附加至本站所有請求的 Cookie |
+| `request.respect_robots` | `boolean` | 否 | 繼承全域 `true` | 本站是否檢查 robots.txt（`src/core/robots.py`）；僅覆寫本站行為 |
 
 範例：
 
@@ -180,9 +181,10 @@ request:
     X-Custom: "value"
   cookies:
     session: "xxx"
+  respect_robots: false
 ```
 
-> 注意：`request` 容器本身 `additionalProperties: false`，僅允許 `headers` / `cookies`。
+> 注意：`request` 容器本身 `additionalProperties: false`，僅允許 `headers` / `cookies` / `respect_robots`。
 
 ---
 
@@ -568,7 +570,7 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 
 | 錯誤訊息要點 | 原因 | 修正 |
 |--------------|------|------|
-| `additionalProperties` | 欄位拼寫錯誤或層級放錯（`additionalProperties: false`） | 檢查欄位名與縮排；`request` 僅允許 `headers`/`cookies`，`pagination` 僅 `enabled`/`type`/`start`/`next_cursor_path` |
+| `additionalProperties` | 欄位拼寫錯誤或層級放錯（`additionalProperties: false`） | 檢查欄位名與縮排；`request` 僅允許 `headers`/`cookies`/`respect_robots`，`pagination` 僅 `enabled`/`type`/`start`/`next_cursor_path` |
 | `is not one of ['html', 'json']` | `type` / `source` / `from` 枚舉錯誤 | `type: html\|json`；`source: url\|html\|json\|keyword`；`from: json_ld\|list_data\|article_json` |
 | `is not one of ['GET', 'POST']` | `method` 大小寫錯誤 | 僅接受大寫 `GET` / `POST` |
 | `is not of type 'string'` / `minimum` / `pattern` | 型別或數值範圍不符 | `name` 非空、`base_url` 須 `^https?://`、`max_items`/`max_pages` `>=1`、`timeout` `>0`、`start` `>=0` |

@@ -52,6 +52,8 @@ $ python main.py --site udn_news --max-items 3
 - **複合解析器**：可解析 HTML（BeautifulSoup）與 JSON 格式的列表頁與文章頁
 - **多種儲存後端**：JSON 檔案、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
 - **分頁爬取**：支援頁碼（`{page}`）與游標（`{cursor}`）兩種分頁模式
+- **增量爬取**：啟動時載入儲存後端已存的 URL，預設略過已知文章（`--no-skip-seen` 可關閉）
+- **robots.txt 遵循**：請求前檢查目標網域的 robots.txt，預設開啟（`request.respect_robots`）
 - **重試機制**：可設定最大重試次數，支援指數回退與 `Retry-After`（僅重試可重試錯誤）
 - **跨站分類統一**：`category_normalization` 將各站分類對應到統一詞彙，便於跨站比對
 
@@ -62,6 +64,7 @@ flowchart LR
     CLI["main.py<br/>CLI"] --> CFG["Settings<br/>YAML + JSON Schema"]
     CFG --> ENGINE["CrawlerEngine<br/>sync / async"]
     ENGINE --> HTTP["HttpClient<br/>curl_cffi / httpx"]
+    ENGINE --> ROBOTS["RobotsPolicy<br/>robots.txt"]
     ENGINE --> CRAWLER["SiteCrawler<br/>來源選擇、分頁、欄位抽取"]
     CRAWLER --> PARSER["Parser<br/>HTML / JSON"]
     CRAWLER --> CLS["Classifier<br/>category / tags"]
@@ -123,6 +126,7 @@ python main.py --site udn_news       # 執行內建範例（聯合新聞網）
 | `--max-pages N` | 覆寫 `limits.max_pages` |
 | `--stop-on-duplicate` / `--no-stop-on-duplicate` | 覆寫 `limits.stop_on_duplicate` |
 | `--timeout SEC` | 覆寫 `limits.timeout` |
+| `--skip-seen` / `--no-skip-seen` | 覆寫 `engine.skip_seen_urls`（是否略過已存的 URL） |
 
 關鍵字與分類可組合使用：
 
@@ -185,7 +189,7 @@ python main.py --site example
 | [docs/global-config.md](docs/global-config.md) | 引擎、limits 四層優先權、HTTP client、重試 |
 | [docs/logging.md](docs/logging.md) | 日誌等級、格式、輪替 |
 | [docs/storage.md](docs/storage.md) | JSON 與資料庫儲存設定 |
-| [docs/architecture.md](docs/architecture.md) | 分層職責、請求生命週期、去重鍵設計 |
+| [docs/architecture.md](docs/architecture.md) | 分層職責、請求生命週期、去重與增量設計、robots.txt 檢查 |
 
 `limits` 最終值採四層合併（後者覆寫、略過 None）：
 **CLI 參數 > site `limits` > settings `limits` > 程式碼預設**。
@@ -212,12 +216,16 @@ python main.py --site example
 `url` 欄位另有 unique 約束做第二層防護，若併發插入撞約束會捕獲 `IntegrityError` 後跳過，不會中斷爬取。
 列表層級另有請求去重，鍵值包含 method、URL、body 與 json_body，避免 POST 分頁被誤判為重複。
 
+啟用 `engine.skip_seen_urls` 時，引擎會在啟動階段以各儲存後端的 `known_urls()` 取得已存網址，
+列表解析出的已知文章直接跳過，不發出請求；搭配 `stop_on_duplicate` 可在遇到第一筆已知文章時收手，
+適合「只補抓最新幾篇」的定期執行。
+
 ## 開發與測試
 
 ```bash
 pip install -r requirements-dev.txt
 
-pytest                    # 304 passed
+pytest                    # 337 passed
 pytest --cov              # 覆蓋率 90%（門檻 85%）
 ruff check src main.py test
 mypy
@@ -241,7 +249,9 @@ storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）
 - 站點改版後需自行維護 selector 與列表來源
 - 單機執行，尚無分散式排程
 - 未處理登入、付費牆與驗證碼
-- 僅供技術研究；使用前請自行確認目標站點的 robots.txt 與使用條款
+- 非同步模式的 `max_items` 為近似上限：worker 並行時，實際收集數可能略超過設定值
+- `request.respect_robots` 預設開啟；`tvbs` 站點因其列表 API 的 robots.txt 為 `Disallow: /`，在設定檔中明確關閉，使用前請自行判斷
+- 仍應自行確認目標站點的使用條款
 
 ## 依賴套件
 
@@ -261,7 +271,7 @@ storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）
 
 - 整合 Celery 以支援分散式任務處理
 - 設計與實作 Middleware 機制以增強爬蟲靈活性
-- 增量爬取排程
+- 定時排程（目前增量爬取需由外部 cron 觸發）
 
 ## 授權
 

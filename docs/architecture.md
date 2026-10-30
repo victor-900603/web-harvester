@@ -8,6 +8,7 @@
 | 設定 | `src/utils/config.py` | 載入 YAML、JSON Schema 驗證、合併 limits 與分類對照表 |
 | 引擎 | `src/core/engine.py` | 佇列排程、重試、限制條件、儲存掛載 |
 | 請求 | `src/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援） |
+| 合規 | `src/core/robots.py` | robots.txt 解析、per-origin 快取與允許判定 |
 | 爬蟲 | `src/crawler/site_crawler.py` | 來源選擇、URL/body 填值、列表與文章解析 |
 | 分類 | `src/crawler/classifier.py` | 由 html / url / json / keyword 規則推導 category 與 tags |
 | 解析 | `src/parsers/` | HTML 與 JSON 的通用抽取 |
@@ -22,8 +23,9 @@ main.py
   └─ build_engine(settings)          # 建立 HTTP client 與 storage backend
   └─ SiteCrawler(site_config, ...)   # 合併 limits、初始化 Classifier
   └─ engine.run(crawler)
+       ├─ 載入已知 URL            # skip_seen_urls 開啟時 union 各 storage 的 known_urls()
        ├─ start_requests()           # 由 list_page.sources 產生第一個列表請求
-       ├─ 佇列取請求 → HTTP 取得回應 → callback 解析
+       ├─ 佇列取請求 → 已知 URL 略過 → robots 檢查 → HTTP 取得回應 → callback 解析
        │    ├─ 回傳 Request          # 下一頁或文章頁，入列
        │    └─ 回傳 Item             # 去重後寫入所有 storage
        └─ 達到 max_items / timeout / 重複即停止
@@ -46,16 +48,27 @@ main.py
 判定依據是來源的 `url`、`body` 與 `json_body` 串接後是否含對應佔位符。
 結果快取於 `_selected_list_cfg`，解析回應時可重新推導同一個來源，不需要額外的請求中介資料。
 
-## 去重設計
+## 去重與增量設計
 
-三層防護，職責互不重疊：
+四層防護，職責互不重疊：
 
-1. **請求層**（`_request_key`）：`(method, url, body, json_body)`。
+1. **跨執行層**（`_known_urls`）：`engine.skip_seen_urls` 開啟時，啟動階段 union 各 storage 的 `known_urls()`，已存的文章 URL 直接跳過、不發出請求。
+2. **請求層**（`_request_key`）：`(method, url, body, json_body)`。
    只以 URL 去重會讓 POST offset 分頁的後續頁被誤判為重複，因此 body 與 json_body 一併納入鍵值。
-2. **寫入層**：存入前以 `url` 查詢既有資料，存在即跳過。
-3. **資料庫約束**：`url` 具 unique 約束，併發插入撞約束時捕獲 `IntegrityError` 並跳過。
+3. **寫入層**：存入前以 `url` 查詢既有資料，存在即跳過。
+4. **資料庫約束**：`url` 具 unique 約束，併發插入撞約束時捕獲 `IntegrityError` 並跳過。
 
-`limits.stop_on_duplicate` 開啟時，遇到重複請求即中止整輪爬取（適用於「最新 N 筆」情境）。
+`limits.stop_on_duplicate` 開啟時，遇到重複請求或已知 URL 即中止整輪爬取（適用於「最新 N 筆」情境）。
+
+## robots.txt
+
+`request.respect_robots`（預設 `true`）開啟時，引擎在送出請求前以 `RobotsPolicy.allowed()` 判定，
+實作位於 `src/core/robots.py`：
+
+- 以 origin 為快取單位，同一次執行對每個網域只抓一次 robots.txt。
+- 4xx 視為無限制；5xx 或連線失敗記 warning 並跳過該 URL，且不快取失敗結果，下次執行重新嘗試。
+- 拒絕時計入 `skipped by robots.txt`，不進入 HTTP 請求階段。
+- `Crawl-delay` 不覆寫 `engine.download_delay`。
 
 ## 為什麼不用瀏覽器
 
