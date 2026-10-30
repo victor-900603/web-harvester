@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, List
 
 from sqlalchemy.exc import IntegrityError
 
@@ -72,7 +73,13 @@ class DatabaseStorage(BaseStorage):
         """Return every article URL already stored, in a single query."""
         session = get_session()
         try:
-            return {url for (url,) in session.query(Article.url).all() if url}
+            urls: set[str] = set()
+            rows: List[Any] = session.query(Article.url).all()
+            for row in rows:
+                url = row[0]
+                if url:
+                    urls.add(str(url))
+            return urls
         except Exception as e:
             logger.error(f"Failed to load known URLs from the database: {e}", exc_info=True)
             return set()
