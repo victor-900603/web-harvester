@@ -8,6 +8,7 @@
 json_storage:
   enabled: true
   output_dir: "data/json"
+  flush_interval: 10
 
 database:
   enabled: true
@@ -27,8 +28,9 @@ database:
 |------|------|--------|
 | `json_storage.enabled` | 是否啟用 JSON 輸出 | `true` |
 | `json_storage.output_dir` | JSON 輸出目錄 | `data/json` |
+| `json_storage.flush_interval` | 每個來源累積多少筆就寫檔一次；`0` 表示只在 `close` 時寫 | `10` |
 
-JSON 為 batch 模式，`close` 時才寫檔，檔名為 `{source}_{YYYYmmdd_HHMMSS}.json`（`date` 為時間戳）。
+JSON 採 batch 模式，依 `Item.source` 分檔，檔名為 `{source}_{YYYYmmdd_HHMMSS}.json`（時間戳固定於該來源首次寫檔的時刻）。每次寫檔都先寫 `{檔名}.tmp` 再 `os.replace`，中斷不會留下半截 JSON；`--all-sites` 時每個站點各自一份檔，最後一個站點不會覆蓋其他站點的結果。
 
 ### database
 

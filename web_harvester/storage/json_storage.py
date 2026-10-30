@@ -20,46 +20,86 @@ class _DateTimeEncoder(json.JSONEncoder):
 logger = logging.getLogger(__name__)
 
 class JSONStorage(BaseStorage):
-    """Storage backend that saves items to a JSON file."""
+    """Storage backend that saves items to a JSON file.
+
+    Items are grouped by ``Item.source``; every source gets its own file named
+    with the template and the timestamp of its first write, so interleaved
+    sources never overwrite each other.
+
+    In batch mode records are buffered and written when ``flush_interval`` new
+    items have accumulated for that source, and again on :meth:`close`.
+    ``flush_interval=0`` keeps everything in memory until ``close``. Each write
+    goes through a temporary file and :func:`os.replace`, so an interrupted run
+    never leaves a truncated JSON document behind.
+    """
 
     def __init__(
         self,
         output_dir: str = "data/json",
         filename_template: str = "{source}_{date}.json",
         batch_mode: bool = True,
+        flush_interval: int = 10,
     ):
         self.output_dir = output_dir
         self.filename_template = filename_template
         self.batch_mode = batch_mode
-        self._buffer: List[dict] = []
-        self._current_source: str = ""
+        self.flush_interval = max(0, int(flush_interval))
+        self._records: Dict[str, List[Dict[str, Any]]] = {}
+        self._paths: Dict[str, str] = {}
+        self._unflushed: Dict[str, int] = {}
 
         os.makedirs(self.output_dir, exist_ok=True)
 
     def save(self, item: Item) -> None:
-        """Save an item to the JSON file."""
-        data = item.to_dict()
+        """Save an item, flushing its source once the interval is reached."""
+        source = item.source or "unknown"
+        record = item.to_dict()
 
-        if self.batch_mode:
-            self._buffer.append(data)
-            self._current_source = item.source
-        else:
-            filepath = self._get_filepath(item.source)
-            self._append_to_file(filepath, data)
+        if not self.batch_mode:
+            filepath = self._filepath_for(source)
+            self._append_to_file(filepath, record)
             logger.debug(f"Saved item to {filepath}.")
+            return
+
+        self._records.setdefault(source, []).append(record)
+        pending = self._unflushed.get(source, 0) + 1
+        self._unflushed[source] = pending
+        if self.flush_interval and pending >= self.flush_interval:
+            self._flush_source(source)
 
     def save_many(self, items: List[Item]) -> None:
-        """Save multiple items to the JSON file."""
+        """Save multiple items using the same batching rules as :meth:`save`."""
         for item in items:
-            self._buffer.append(item.to_dict())
-            self._current_source = item.source
+            self.save(item)
+
+    def flush(self) -> None:
+        """Write the buffered records of every source to disk."""
+        for source in list(self._records):
+            if self._unflushed.get(source, 0):
+                self._flush_source(source)
 
     def close(self) -> None:
-        if self._buffer:
-            filepath = self._get_filepath(self._current_source)
-            self._write_json(filepath, self._buffer)
-            logger.debug(f"Saved {len(self._buffer)} items to {filepath}.")
-            self._buffer.clear()
+        """Flush any remaining records."""
+        self.flush()
+
+    def _flush_source(self, source: str) -> None:
+        records = self._records.get(source) or []
+        if not records:
+            return
+
+        filepath = self._filepath_for(source)
+        self._write_json(filepath, records)
+        self._unflushed[source] = 0
+        logger.debug(f"Saved {len(records)} items to {filepath}.")
+
+    def _filepath_for(self, source: str) -> str:
+        """Return the file path of ``source``, fixed at its first write."""
+        filepath = self._paths.get(source)
+        if filepath is None:
+            filepath = self._get_filepath(source)
+            self._paths[source] = filepath
+            logger.debug(f"Writing source '{source}' to {filepath}.")
+        return filepath
 
     def _get_filepath(self, source: str) -> str:
         """Generate a file path based on the source and current date.
@@ -76,36 +116,33 @@ class JSONStorage(BaseStorage):
 
     @staticmethod
     def _write_json(filepath: str, data: List[Dict[str, Any]]) -> None:
-        """Write a list of dictionaries to a JSON file.
+        """Atomically write a list of dictionaries to a JSON file.
 
         Args:
             filepath (str): The path to the JSON file.
             data (List[Dict[str, Any]]): The data to write to the file.
         """
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+        tmp_path = f"{filepath}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4, cls=_DateTimeEncoder)
+        os.replace(tmp_path, filepath)
 
-    @staticmethod
-    def _append_to_file(filepath: str, data: Dict[str, Any]) -> None:
+    @classmethod
+    def _append_to_file(cls, filepath: str, data: Dict[str, Any]) -> None:
         """Append a single dictionary to a JSON file, creating the file if it doesn't exist.
 
         Args:
             filepath (str): The path to the JSON file.
             data (Dict[str, Any]): The data to append to the file.
         """
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-
+        existing_data: List[Dict[str, Any]] = []
         if os.path.exists(filepath):
-            with open(filepath, "r+", encoding="utf-8") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 try:
                     existing_data = json.load(f)
                 except json.JSONDecodeError:
                     existing_data = []
-        else:
-            existing_data = []
 
         existing_data.append(data)
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=4, cls=_DateTimeEncoder)
+        cls._write_json(filepath, existing_data)

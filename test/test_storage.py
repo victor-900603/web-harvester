@@ -85,6 +85,70 @@ class TestJSONStorage:
         assert len(data) == 2
 
 
+class TestJSONStorageFlush:
+    def test_flush_interval_writes_before_close(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=2)
+        storage.save(make_item(url="https://example.com/1"))
+        assert list(tmp_path.iterdir()) == []
+        storage.save(make_item(url="https://example.com/2"))
+        files = list(tmp_path.iterdir())
+        assert len(files) == 1
+        data = json_lib.loads(files[0].read_text(encoding="utf-8"))
+        assert len(data) == 2
+        storage.close()
+
+    def test_flush_interval_zero_defers_until_close(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=0)
+        for index in range(5):
+            storage.save(make_item(url=f"https://example.com/{index}"))
+        assert list(tmp_path.iterdir()) == []
+        storage.close()
+        data = json_lib.loads(next(tmp_path.iterdir()).read_text(encoding="utf-8"))
+        assert len(data) == 5
+
+    def test_repeated_flushes_keep_one_file_and_all_records(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=2)
+        for index in range(5):
+            storage.save(make_item(url=f"https://example.com/{index}"))
+        storage.close()
+
+        files = list(tmp_path.iterdir())
+        assert len(files) == 1
+        data = json_lib.loads(files[0].read_text(encoding="utf-8"))
+        assert [record["url"] for record in data] == [
+            f"https://example.com/{index}" for index in range(5)
+        ]
+
+    def test_sources_are_written_to_separate_files(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=1)
+        storage.save(Item(data={"title": "A"}, source="udn", url="https://udn.com/1"))
+        storage.save(Item(data={"title": "B"}, source="cna", url="https://cna.com.tw/1"))
+        storage.save(Item(data={"title": "C"}, source="udn", url="https://udn.com/2"))
+        storage.close()
+
+        files = sorted(files for files in tmp_path.iterdir())
+        assert len(files) == 2
+        by_name = {path.name.split("_")[0]: path for path in files}
+        udn = json_lib.loads(by_name["udn"].read_text(encoding="utf-8"))
+        cna = json_lib.loads(by_name["cna"].read_text(encoding="utf-8"))
+        assert [record["title"] for record in udn] == ["A", "C"]
+        assert [record["title"] for record in cna] == ["B"]
+
+    def test_write_leaves_no_temporary_file(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=1)
+        storage.save(make_item(url="https://example.com/1"))
+        storage.close()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_flush_writes_pending_records(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True, flush_interval=0)
+        storage.save(make_item(url="https://example.com/1"))
+        storage.flush()
+        data = json_lib.loads(next(tmp_path.iterdir()).read_text(encoding="utf-8"))
+        assert len(data) == 1
+        storage.close()
+
+
 class TestDatabaseStorage:
     def test_save_and_query(self, tmp_path):
         db_url = f"sqlite:///{tmp_path}/test.db"

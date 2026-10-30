@@ -182,6 +182,11 @@
         "output_dir": {
           "type": "string",
           "minLength": 1
+        },
+        "flush_interval": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Write buffered records every N items per source; 0 keeps them until close."
         }
       },
       "required": ["enabled"]

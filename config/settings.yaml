@@ -58,6 +58,7 @@ logging:
 json_storage:
   enabled: true
   output_dir: "data/json"
+  flush_interval: 10           # 每個來源累積 N 筆就寫檔（0 表示只在結束時寫）
 
 database:
   enabled: true

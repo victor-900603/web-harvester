@@ -623,6 +623,7 @@ def build_engine(
     if json_cfg.get("enabled", False):
         engine.add_storage(JSONStorage(
             output_dir=json_cfg.get("output_dir", "data/json"),
+            flush_interval=json_cfg.get("flush_interval", 10),
         ))
 
     db_cfg = settings.get("database", {})
