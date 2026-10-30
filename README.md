@@ -14,7 +14,7 @@
 - **站點差異留在設定層**：新增站點不必碰 Python，也不會出現十個 `if site == "..."` 的分支。
 - **不依賴瀏覽器**：不引入 Playwright / Selenium。預設以 `curl_cffi` 模擬瀏覽器 TLS 指紋（JA3/Akamai）通過反爬，必要時可切回 `httpx`。
 - **錯誤在啟動時就爆**：所有 YAML 以 JSON Schema 嚴格驗證（`additionalProperties: false`），打錯欄位名稱會立刻 `ConfigValidationError`，而不是安靜地爬回零筆資料。
-- **可驗證**：381 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+- **可驗證**：397 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
 - **對站方禮貌**：per-domain 最小間隔、robots.txt 檢查、有上限的併發與重試，並重用 HTTP session 避免重複握手。
 
 ## 實際執行輸出
@@ -59,7 +59,8 @@ Dry run finished: 20 article page(s) would be fetched, 0 item(s) stored.
 - **雙執行模式**：支援同步（`sync`）與非同步（`async`）兩種模式
 - **TLS 指紋偽裝**：基於 `curl_cffi` 的瀏覽器指紋模擬（JA3/Akamai），支援 `chrome`/`safari`/`firefox`/`edge` impersonate 與自訂 `ja3`/`akamai`，預設 `chrome131`
 - **複合解析器**：可解析 HTML（BeautifulSoup）與 JSON 格式的列表頁與文章頁
-- **多種儲存後端**：JSON 檔案、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
+- **多種儲存後端**：JSON 檔案（每站一份、定期落盤、原子寫入）、SQLite、PostgreSQL、MySQL（透過 SQLAlchemy）
+- **一致的資料契約**：`published_at` 解析失敗即為 `null`，不會讓原始字串流進資料庫造成整筆寫入失敗
 - **分頁爬取**：支援頁碼（`{page}`）與游標（`{cursor}`）兩種分頁模式
 - **增量爬取**：啟動時載入儲存後端已存的 URL，預設略過已知文章（`--no-skip-seen` 可關閉）
 - **robots.txt 遵循**：請求前檢查目標網域的 robots.txt，預設開啟（`request.respect_robots`）
@@ -205,7 +206,7 @@ article_page:
 web-harvester --site example
 ```
 
-設定不符 schema 時會在啟動階段立即失敗並指出欄位路徑。完整欄位、POST `body`/`json_body`、游標分頁、`url_filter`、分類與標籤來源請見 [docs/site-config.md](docs/site-config.md)。
+設定不符 schema 時會在啟動階段立即失敗並指出欄位路徑。完整欄位、POST `body`/`json_body`、游標分頁、`url_filter`/`exclude_patterns`、分類與標籤來源請見 [docs/site-config.md](docs/site-config.md)。
 
 ## 設定說明
 
@@ -273,6 +274,7 @@ storage 測試使用 pytest 的 `tmp_path` 暫時目錄。CI（GitHub Actions）
 
 - 不執行 JavaScript，需要瀏覽器渲染的 SPA 站點不適用
 - 站點改版後需自行維護 selector 與列表來源
+- 文章頁的日期若不符設定或 ISO 格式，`published_at` 會是 `null`（其餘欄位照常寫入），需在該站設定補 `datetime_format`
 - 單機執行，尚無分散式排程
 - 未處理登入、付費牆與驗證碼
 - 非同步模式的 `max_items` 在達到上限後會停止派發新請求，但已在傳輸中的請求仍可能完成，因此實際筆數可能略高於設定值

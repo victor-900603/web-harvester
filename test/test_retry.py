@@ -36,8 +36,17 @@ class TestIsRetryable:
         assert is_retryable(httpx.ConnectError("boom")) is True
         assert is_retryable(httpx.ReadTimeout("slow")) is True
 
-    def test_unknown_exception_defaults_to_retryable(self):
-        assert is_retryable(RuntimeError("curl_cffi failure")) is True
+    def test_unknown_exception_is_not_retryable(self):
+        assert is_retryable(RuntimeError("unexpected")) is False
+        assert is_retryable(ValueError("bad value")) is False
+
+    def test_os_and_timeout_errors_retryable(self):
+        assert is_retryable(ConnectionResetError("reset")) is True
+        assert is_retryable(TimeoutError("timed out")) is True
+
+    def test_curl_cffi_error_retryable(self):
+        curl_error = pytest.importorskip("curl_cffi.requests.exceptions").CurlError
+        assert is_retryable(curl_error("transfer failed")) is True
 
 
 class TestParseRetryAfter:

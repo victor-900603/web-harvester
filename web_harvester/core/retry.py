@@ -21,18 +21,38 @@ DEFAULT_MULTIPLIER = 2.0
 DEFAULT_JITTER = "full"
 
 
+_CURL_ERRORS: Optional[tuple] = None
+
+
+def _curl_cffi_errors() -> tuple:
+    """Return curl_cffi's transport error type, or an empty tuple if unavailable."""
+    global _CURL_ERRORS
+    if _CURL_ERRORS is None:
+        try:
+            from curl_cffi.requests.exceptions import CurlError
+        except ImportError:
+            _CURL_ERRORS = ()
+        else:
+            _CURL_ERRORS = (CurlError,)
+    return _CURL_ERRORS
+
+
 def is_retryable(exc: BaseException) -> bool:
     """Return whether an exception raised during a fetch should be retried.
 
     HTTP status errors are retryable only for transient conditions (408, 429
-    and 5xx); other 4xx responses fail fast. Transport errors (timeouts,
-    connection failures) and unknown network errors (e.g. curl_cffi errors)
-    are treated as retryable.
+    and 5xx); other 4xx responses fail fast. Transport failures (httpx transport
+    errors, socket errors, timeouts and curl_cffi transport errors) are
+    retryable. Anything else - programming errors, config problems such as a
+    bad impersonate target - fails immediately instead of being retried three
+    times for nothing.
     """
     if isinstance(exc, httpx.HTTPStatusError):
         status_code = exc.response.status_code
         return status_code in RETRYABLE_STATUS_CODES or status_code >= 500
-    return True
+    if isinstance(exc, (httpx.TransportError, OSError, TimeoutError)):
+        return True
+    return isinstance(exc, _curl_cffi_errors())
 
 
 def parse_retry_after(value: Any) -> Optional[float]:

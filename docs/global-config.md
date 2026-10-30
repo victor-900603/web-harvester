@@ -82,7 +82,7 @@ category_normalization: {}
 
 #### 重試與指數回退行為
 
-- 可重試錯誤：HTTP `408` / `429` / `5xx`、連線或逾時等傳輸錯誤，以及未知網路錯誤（例如 curl_cffi 自身錯誤）；其餘 4xx 直接失敗不重試。
+- 可重試錯誤：HTTP `408` / `429` / `5xx`、傳輸層錯誤（`httpx.TransportError`、`OSError`、`TimeoutError`）與 curl_cffi 的 `CurlError`；其餘 4xx 與程式邏輯例外（如 `ValueError`）直接失敗不重試。
 - 延遲計算：`min(base_delay * multiplier ** (已失敗次數 - 1), max_delay)`，再依 `jitter` 加入隨機抖動（`full` 為 `[0, delay]` 均勻分布，`equal` 為 `[delay/2, delay]`，`none` 不加）。
 - `respect_retry_after` 為 `true` 時，若錯誤回應帶有 `Retry-After`（支援秒數與 HTTP-date）則採用，但仍以 `max_delay` 封頂，避免伺服器回傳過大值造成長時間等待。
 - `max_retries` 為總嘗試次數；最後一次失敗後不再等待，直接放棄該請求。

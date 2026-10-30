@@ -33,6 +33,9 @@ web-harvester（或 python main.py）
        └─ 達到 max_items / timeout / 重複即停止
 ```
 
+列表解析階段先套用 `extract.exclude_patterns`（HTML 與 JSON 共用），被排除的連結不產生文章請求；
+文章欄位若宣告 `as: datetime`，解析失敗一律得到 `None`，避免原始字串流入 DateTime 欄位造成整筆寫入失敗。
+
 `--dry-run` 只影響標記為 `Request.is_article` 的請求：列表頁照常抓取並解析，文章頁在發出請求前即跳過，
 計數記在 `skipped_articles`，因此可以在不寫入任何資料的情況下驗證設定。
 
