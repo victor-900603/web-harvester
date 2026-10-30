@@ -4,20 +4,21 @@
 
 | 層 | 模組 | 職責 |
 |----|------|------|
-| 入口 | `main.py` | 解析 CLI、載入站點設定、建立 Settings 與 Engine |
-| 設定 | `src/utils/config.py` | 載入 YAML、JSON Schema 驗證、合併 limits 與分類對照表 |
-| 引擎 | `src/core/engine.py` | 佇列排程、重試、限制條件、儲存掛載 |
-| 請求 | `src/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援） |
-| 合規 | `src/core/robots.py` | robots.txt 解析、per-origin 快取與允許判定 |
-| 爬蟲 | `src/crawler/site_crawler.py` | 來源選擇、URL/body 填值、列表與文章解析 |
-| 分類 | `src/crawler/classifier.py` | 由 html / url / json / keyword 規則推導 category 與 tags |
-| 解析 | `src/parsers/` | HTML 與 JSON 的通用抽取 |
-| 儲存 | `src/storage/` | JSON 批次輸出與 SQLAlchemy 寫入 |
+| 入口 | `web_harvester/cli.py`（`main.py` 為相容薄層） | 解析 CLI、解析設定目錄、載入站點設定、建立 Settings 與 Engine |
+| 設定 | `web_harvester/utils/config.py` | 載入 YAML、JSON Schema 驗證、合併 limits 與分類對照表 |
+| 引擎 | `web_harvester/core/engine.py` | 佇列排程、重試、限制條件、儲存掛載 |
+| 請求 | `web_harvester/core/http_client/` | HTTP 抽象層（`curl_cffi` 預設、`httpx` 備援） |
+| 合規 | `web_harvester/core/robots.py` | robots.txt 解析、per-origin 快取與允許判定 |
+| 爬蟲 | `web_harvester/crawler/site_crawler.py` | 來源選擇、URL/body 填值、列表與文章解析 |
+| 分類 | `web_harvester/crawler/classifier.py` | 由 html / url / json / keyword 規則推導 category 與 tags |
+| 解析 | `web_harvester/parsers/` | HTML 與 JSON 的通用抽取 |
+| 儲存 | `web_harvester/storage/` | JSON 批次輸出與 SQLAlchemy 寫入 |
 
 ## 請求生命週期
 
 ```
-main.py
+web-harvester（或 python main.py）
+  └─ resolve_config_dir(--config-dir / env / 向上尋找)  # 決定 config/ 位置
   └─ Settings()                      # config/settings.yaml + category_normalization.yaml
   └─ load_site_config(site)          # config/sites/<site>.yaml，Schema 驗證 fail-fast
   └─ build_engine(settings)          # 建立 HTTP client 與 storage backend
@@ -25,11 +26,17 @@ main.py
   └─ engine.run(crawler)
        ├─ 載入已知 URL            # skip_seen_urls 開啟時 union 各 storage 的 known_urls()
        ├─ start_requests()           # 由 list_page.sources 產生第一個列表請求
-       ├─ 佇列取請求 → 已知 URL 略過 → robots 檢查 → HTTP 取得回應 → callback 解析
-       │    ├─ 回傳 Request          # 下一頁或文章頁，入列
+       ├─ 佇列取請求 → 已知 URL 略過 → dry run 略過文章頁 → robots 檢查 → HTTP 取得回應 → callback 解析
+       │    ├─ 回傳 Request          # 下一頁（is_article=False）或文章頁（is_article=True），入列
        │    └─ 回傳 Item             # 去重後寫入所有 storage
        └─ 達到 max_items / timeout / 重複即停止
 ```
+
+`--dry-run` 只影響標記為 `Request.is_article` 的請求：列表頁照常抓取並解析，文章頁在發出請求前即跳過，
+計數記在 `skipped_articles`，因此可以在不寫入任何資料的情況下驗證設定。
+
+`--all-sites` 對每個站點各自建立一個 engine 與 crawler，因此儲存後端、去重狀態與統計互不干擾；
+單一 SiteCrawler 的 `_selected_list_cfg` 快取與 `_current_source` 也不會跨站污染。
 
 同步模式以 `deque` 搭配單執行緒迴圈，並在每次請求間套用 `download_delay`。
 非同步模式以固定數量 worker 共用 `asyncio.Queue`，去重與停止條件透過 `stop_event` 收斂。
@@ -63,7 +70,7 @@ main.py
 ## robots.txt
 
 `request.respect_robots`（預設 `true`）開啟時，引擎在送出請求前以 `RobotsPolicy.allowed()` 判定，
-實作位於 `src/core/robots.py`：
+實作位於 `web_harvester/core/robots.py`：
 
 - 以 origin 為快取單位，同一次執行對每個網域只抓一次 robots.txt。
 - 4xx 視為無限制；5xx 或連線失敗記 warning 並跳過該 URL，且不快取失敗結果，下次執行重新嘗試。
@@ -79,6 +86,6 @@ main.py
 ## 擴充點
 
 - **新增站點**：只加 `config/sites/<name>.yaml`，同步確認 `config/schema/site.schema.json` 已涵蓋所需欄位。
-- **新增 HTTP client**：實作 `src/core/http_client/base.py` 的 `BaseHttpClient`，並在 `factory.py` 註冊。
-- **新增儲存後端**：實作 `src/storage/base.py` 的 `BaseStorage`，於 `build_engine` 掛載。
-- **新增解析格式**：在 `src/parsers/` 增加實作，並於 `SiteCrawler` 依 `type` 分派。
+- **新增 HTTP client**：實作 `web_harvester/core/http_client/base.py` 的 `BaseHttpClient`，並在 `factory.py` 註冊。
+- **新增儲存後端**：實作 `web_harvester/storage/base.py` 的 `BaseStorage`，於 `build_engine` 掛載。
+- **新增解析格式**：在 `web_harvester/parsers/` 增加實作，並於 `SiteCrawler` 依 `type` 分派。

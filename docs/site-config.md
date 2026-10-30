@@ -1,6 +1,6 @@
 # 網站設定說明
 
-站點設定檔 `config/sites/<name>.yaml` 由 `config/schema/site.schema.json` 嚴格驗證（`additionalProperties: false`，啟動時 fail-fast，詳見 `src/utils/config.py:validate_config`）。所有欄位含型別、取值範圍與必填約束皆以該 Schema 為準；以下說明逐欄對應 Schema 定義，未列出的欄位寫入即報錯。
+站點設定檔 `config/sites/<name>.yaml` 由 `config/schema/site.schema.json` 嚴格驗證（`additionalProperties: false`，啟動時 fail-fast，詳見 `web_harvester/utils/config.py:validate_config`）。所有欄位含型別、取值範圍與必填約束皆以該 Schema 為準；以下說明逐欄對應 Schema 定義，未列出的欄位寫入即報錯。
 
 相關全域設定（`limits` / `request` / `category_normalization` / CLI 覆寫）見 [global-config.md](global-config.md)。
 
@@ -24,7 +24,7 @@
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
 | `name` | `string` (`minLength: 1`) | 是 | - | 站點顯示名稱，同時作為儲存與日誌的 `source` 識別 |
-| `base_url` | `string` (`pattern: ^https?://`) | 是 | - | 基底 URL，用於相對連結補全（`src/crawler/site_crawler.py:281` `urljoin`） |
+| `base_url` | `string` (`pattern: ^https?://`) | 是 | - | 基底 URL，用於相對連結補全（`web_harvester/crawler/site_crawler.py:281` `urljoin`） |
 | `limits` | `object` | 否 | 繼承 `config/settings.yaml:limits` | 單站覆寫全域限制，見 [§3](#3-limits) |
 | `request` | `object` | 否 | `{}` | 僅套用本站的請求附加設定，見 [§4](#4-request) |
 | `list_page` | `object` | 否 | `{}` | 列表頁設定；若提供則 `sources` 必填，見 [§5](#5-list_page) |
@@ -40,7 +40,7 @@
 
 ### 2.1 最小可運行範例
 
-可直接複製為 `config/sites/my_site.yaml` 並執行 `python main.py --site my_site`：
+可直接複製為 `config/sites/my_site.yaml` 並執行 `web-harvester --site my_site`：
 
 ```yaml
 name: "example"
@@ -148,11 +148,11 @@ tags:                                # §7
 | 欄位 | 類型 | 必填 | 預設（全域） | 說明 |
 |------|------|------|--------------|------|
 | `max_items` | `integer` `>=1` | 否 | `100` | 收集達標即停止（engine 逐項計數） |
-| `max_pages` | `integer` `>=1` | 否 | `3` | 列表頁數上限，唯一權威值；`pagination` 僅管 `enabled` / `type` / `start` / `next_cursor_path`（`src/crawler/site_crawler.py` `start_requests` / `_build_next_cursor_request`） |
+| `max_pages` | `integer` `>=1` | 否 | `3` | 列表頁數上限，唯一權威值；`pagination` 僅管 `enabled` / `type` / `start` / `next_cursor_path`（`web_harvester/crawler/site_crawler.py` `start_requests` / `_build_next_cursor_request`） |
 | `stop_on_duplicate` | `boolean` | 否 | `false` | `true` 遇到重複 URL 即停止；`false` 僅跳過該 URL 繼續 |
 | `timeout` | `number` `>0` | 否 | `180` | 整體爬取逾時（秒） |
 
-三層合併（`src/utils/config.py:merge_limits`，後者覆寫、跳過 `None`）：
+三層合併（`web_harvester/utils/config.py:merge_limits`，後者覆寫、跳過 `None`）：
 
 ```
 CLI 參數 (--max-items 等) > site.limits > settings.limits > 程式碼預設
@@ -164,13 +164,13 @@ CLI 僅本次生效，不寫回檔案，詳見 [global-config.md](global-config.
 
 ## 4. request
 
-僅套用本站（`src/crawler/site_crawler.py:198,249` 注入 `Request.headers` / `cookies`）。全域 `request.user_agent` / `verify_ssl` 自動套用所有請求（見 [global-config.md](global-config.md)）。
+僅套用本站（`web_harvester/crawler/site_crawler.py:198,249` 注入 `Request.headers` / `cookies`）。全域 `request.user_agent` / `verify_ssl` 自動套用所有請求（見 [global-config.md](global-config.md)）。
 
 | 欄位 | 類型 | 必填 | 預設 | 說明 |
 |------|------|------|------|------|
 | `request.headers` | `object<string,string>` | 否 | `{}` | 附加至本站所有請求的標頭（列表與文章共用） |
 | `request.cookies` | `object<string,string>` | 否 | `{}` | 附加至本站所有請求的 Cookie |
-| `request.respect_robots` | `boolean` | 否 | 繼承全域 `true` | 本站是否檢查 robots.txt（`src/core/robots.py`）；僅覆寫本站行為 |
+| `request.respect_robots` | `boolean` | 否 | 繼承全域 `true` | 本站是否檢查 robots.txt（`web_harvester/core/robots.py`）；僅覆寫本站行為 |
 
 範例：
 
@@ -190,7 +190,7 @@ request:
 
 ## 5. list_page
 
-`list_page`（`config/schema/site.schema.json`）為選填物件；一旦提供，`sources` 必填。`list_page` 本身只承載 `sources` / `categories` / `category_default`；**每個 `source` 皆為 self-contained，各自帶 `type`（必填）、`extract`（必填）以及選用的 `method` / `pagination` / `body` / `json_body`，彼此不繼承、不合併**（`src/crawler/site_crawler.py:_select_list_cfg` 直接回傳選中的來源設定）。
+`list_page`（`config/schema/site.schema.json`）為選填物件；一旦提供，`sources` 必填。`list_page` 本身只承載 `sources` / `categories` / `category_default`；**每個 `source` 皆為 self-contained，各自帶 `type`（必填）、`extract`（必填）以及選用的 `method` / `pagination` / `body` / `json_body`，彼此不繼承、不合併**（`web_harvester/crawler/site_crawler.py:_select_list_cfg` 直接回傳選中的來源設定）。
 
 ### 5.1 來源設定模型
 
@@ -199,7 +199,7 @@ request:
 | 欄位 | 是否必填 | 說明 |
 |------|----------|------|
 | `url` | 是 | 列表 URL 模板，每個來源獨立 |
-| `type` | 是 | `html` / `json`，決定 `extract` 形態與解析分支（`src/crawler/site_crawler.py:parse_list`） |
+| `type` | 是 | `html` / `json`，決定 `extract` 形態與解析分支（`web_harvester/crawler/site_crawler.py:parse_list`） |
 | `extract` | 是 | 完整形態（含 `required`），HTML 或 JSON 二選一，須與 `type` 一致（schema `allOf if/then`） |
 | `method` | 否 | `GET`（預設）/ `POST` |
 | `pagination` | 否 | 選用；未提供時視為不分頁 |
@@ -221,9 +221,9 @@ request:
 
 ### 5.3 extract
 
-每個來源的 `extract` 為完整形態（含 `required`），依 `type` 二選一、不可混用（`$defs/list_extract_html` / `$defs/list_extract_json`，schema `allOf if/then`；`src/crawler/site_crawler.py:parse_list` 依 `type` 分派）。
+每個來源的 `extract` 為完整形態（含 `required`），依 `type` 二選一、不可混用（`$defs/list_extract_html` / `$defs/list_extract_json`，schema `allOf if/then`；`web_harvester/crawler/site_crawler.py:parse_list` 依 `type` 分派）。
 
-#### HTML 列表（`type: html`，`src/crawler/site_crawler.py:_parse_html_list`）
+#### HTML 列表（`type: html`，`web_harvester/crawler/site_crawler.py:_parse_html_list`）
 
 | 欄位 | 類型 | 必填 | 預設（程式） | 說明 |
 |------|------|------|--------------|------|
@@ -233,7 +233,7 @@ request:
 
 行為細節：遍歷 `parser.select(item_selector)` → 每項取 `select_one(link_selector)` → `get(link_attr)` 或 `get_text` → `urljoin(base_url, href)`。
 
-#### JSON 列表（`type: json`，`src/crawler/site_crawler.py:_parse_json_list`）
+#### JSON 列表（`type: json`，`web_harvester/crawler/site_crawler.py:_parse_json_list`）
 
 | 欄位 | 類型 | 必填 | 預設（程式） | 說明 |
 |------|------|------|--------------|------|
@@ -270,7 +270,7 @@ request:
 
 ### 5.6 POST 請求本文（body / json_body）
 
-部分站點的列表 API 需要 POST 並帶請求本文。各 `source` 可設定 `body`（原始字串）或 `json_body`（JSON 物件）；`method: POST` 時由 HTTP client 送出（`src/core/http_client/curl_cffi_client.py` 以 `data=body, json=json_body` 傳遞）。
+部分站點的列表 API 需要 POST 並帶請求本文。各 `source` 可設定 `body`（原始字串）或 `json_body`（JSON 物件）；`method: POST` 時由 HTTP client 送出（`web_harvester/core/http_client/curl_cffi_client.py` 以 `data=body, json=json_body` 傳遞）。
 
 | 欄位 | 類型 | 說明 |
 |------|------|------|
@@ -368,7 +368,7 @@ fields:
 
 ## 7. 分類與標籤
 
-兩者皆為多值累加、自動去重（`src/crawler/classifier.py:48-97`）。差異：`category` 全失敗時取 `default`；`tags` 無兜底。
+兩者皆為多值累加、自動去重（`web_harvester/crawler/classifier.py:48-97`）。差異：`category` 全失敗時取 `default`；`tags` 無兜底。
 
 ### 7.1 category / tags 對照
 
@@ -530,7 +530,7 @@ tags:
 
 ## 8. 搜尋與篩選
 
-CLI `--keyword` / `--category` 為選用、可組合，需站點 `sources[].url` 含對應佔位符才生效（`src/crawler/site_crawler.py:_select_list_cfg` / `_build_list_url`）。
+CLI `--keyword` / `--category` 為選用、可組合，需站點 `sources[].url` 含對應佔位符才生效（`web_harvester/crawler/site_crawler.py:_select_list_cfg` / `_build_list_url`）。
 
 ### 8.1 佔位符
 
@@ -545,7 +545,7 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 
 ### 8.2 來源選擇
 
-依 URL 內實際出現的佔位符判斷支援度，永遠優雅降級（`src/crawler/site_crawler.py:_select_list_cfg`），結果快取於 `_selected_list_cfg`：
+依 URL 內實際出現的佔位符判斷支援度，永遠優雅降級（`web_harvester/crawler/site_crawler.py:_select_list_cfg`），結果快取於 `_selected_list_cfg`：
 
 | 請求 | 優先順序 | 行為 |
 |------|----------|------|
@@ -564,7 +564,7 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 
 ## 9. 驗證與除錯
 
-所有設定載入時以 JSON Schema 嚴格驗證（`site.schema.json` / `settings.schema.json`，`src/utils/config.py:validate_config`），失敗拋 `ConfigValidationError` 並標示 JSON Pointer 路徑。
+所有設定載入時以 JSON Schema 嚴格驗證（`site.schema.json` / `settings.schema.json`，`web_harvester/utils/config.py:validate_config`），失敗拋 `ConfigValidationError` 並標示 JSON Pointer 路徑。
 
 ### 9.1 常見錯誤
 
@@ -583,10 +583,10 @@ URL 模板內未出現的佔位符不影響爬取；多餘佔位符以空字串�
 
 ```bash
 # 啟動即驗證，報錯含路徑與 Schema 關鍵字
-python main.py --site <site_id>
+web-harvester --site <site_id>
 
 # 確認站點已註冊（掃描 config/sites/*.yaml）
-python main.py --list-sites
+web-harvester --list-sites
 
 # 僅驗證單站（不發請求）
 python -c "from src.utils.config import load_site_config; load_site_config('full_example')"
@@ -602,7 +602,7 @@ python -c "from src.utils.config import load_site_config; load_site_config('full
 
 ```yaml
 # Schema: config/schema/site.schema.json
-# 驗證：python main.py --site <site_id> 啟動即檢查
+# 驗證：web-harvester --site <site_id> 啟動即檢查
 
 # ── 頂層 (required: ["name","base_url"]) ──
 name: "完整範例站"
@@ -782,7 +782,7 @@ tags:
 | Schema 位置 | 規則 |
 |-------------|------|
 | `additionalProperties: false` 全域 | 未知欄位/拼錯立即報錯（含頂層、`request`、`pagination`、`html/json_field_config` 等） |
-| `list_page` self-contained | `list_page` 只允許 `sources` / `categories` / `category_default`；每個 `source` 必填 `type` + `extract`，並以 `allOf if/then` 強制 `extract` 形態與 `type` 一致（`src/crawler/site_crawler.py:_select_list_cfg`） |
+| `list_page` self-contained | `list_page` 只允許 `sources` / `categories` / `category_default`；每個 `source` 必填 `type` + `extract`，並以 `allOf if/then` 強制 `extract` 形態與 `type` 一致（`web_harvester/crawler/site_crawler.py:_select_list_cfg`） |
 | `article_page` `allOf` | `type: html` 時物件必含 `selector`，`type: json` 必含 `path`，混用驗證失敗；`as` 僅 `text`/`datetime`，`attr` 值不再受限 |
 | `classifier_source` `oneOf` 4 型 | `source` 決定形態：`url` 需 `regex`、`html` 需 `selector`、`json` 需 `from`+`path`、`keyword` 需 `rules`；`mapping`/`split` 通用；`html` 的 `multiple`/`join` 互斥 |
-| `classifier_mapping` | `object<string,string>`，未命中保留原值（`src/crawler/classifier.py:187-193`） |
+| `classifier_mapping` | `object<string,string>`，未命中保留原值（`web_harvester/crawler/classifier.py:187-193`） |

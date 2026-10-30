@@ -1,7 +1,7 @@
 # Web Harvester
 
 [![CI](https://github.com/victor-900603/web-harvester/actions/workflows/ci.yml/badge.svg)](https://github.com/victor-900603/web-harvester/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/victor-900603/web-harvester)
+[![coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/victor-900603/web-harvester)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 設定檔驅動的新聞爬蟲框架。**新增一個新聞站點只需要一份 YAML，不必改動程式碼。**
@@ -14,18 +14,26 @@
 - **站點差異留在設定層**：新增站點不必碰 Python，也不會出現十個 `if site == "..."` 的分支。
 - **不依賴瀏覽器**：不引入 Playwright / Selenium。預設以 `curl_cffi` 模擬瀏覽器 TLS 指紋（JA3/Akamai）通過反爬，必要時可切回 `httpx`。
 - **錯誤在啟動時就爆**：所有 YAML 以 JSON Schema 嚴格驗證（`additionalProperties: false`），打錯欄位名稱會立刻 `ConfigValidationError`，而不是安靜地爬回零筆資料。
-- **可驗證**：304 個單元測試、覆蓋率 90%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
+- **可驗證**：357 個單元測試、覆蓋率 91%（CI 門檻 85%）、`ruff` 與 `mypy` 全綠，全部由 GitHub Actions 執行。
 
 ## 實際執行輸出
 
 ```console
-$ python main.py --site udn_news --max-items 3
-2026-10-29 16:50:43 [INFO] src.storage.database: Database engine initialized with URL: sqlite:///data/articles.db
-2026-10-29 16:50:43 [INFO] src.core.engine: Starting crawler: 聯合新聞網 in sync mode
-2026-10-29 16:50:44 [INFO] src.crawler.site_crawler: List page parsed: https://udn.com/api/more?page=1&... -> 20 link(s)
-2026-10-29 16:50:49 [INFO] src.core.engine: Reached max_items limit of 3. Stopping.
-2026-10-29 16:50:49 [INFO] src.core.engine: Total requests made: 4, total items collected: 3
-2026-10-29 16:50:49 [INFO] src.core.engine: Crawler finished: 聯合新聞網
+$ web-harvester --site udn_news --max-items 3
+2026-10-30 16:50:43 [INFO] web_harvester.storage.database: Database engine initialized with URL: sqlite:///data/articles.db
+2026-10-30 16:50:43 [INFO] web_harvester.core.engine: Starting crawler: 聯合新聞網 in sync mode
+2026-10-30 16:50:44 [INFO] web_harvester.crawler.site_crawler: List page parsed: https://udn.com/api/more?page=1&... -> 20 link(s)
+2026-10-30 16:50:49 [INFO] web_harvester.core.engine: Reached max_items limit of 3. Stopping.
+2026-10-30 16:50:49 [INFO] web_harvester.core.engine: Total requests made: 4, total items collected: 3, skipped known URLs: 0, skipped by robots.txt: 0
+2026-10-30 16:50:49 [INFO] web_harvester.core.engine: Crawler finished: 聯合新聞網
+```
+
+只想確認設定是否正確、不抓文章頁時用 `--dry-run`：
+
+```console
+$ web-harvester --site cna --dry-run --max-pages 1
+2026-10-30 17:02:11 [INFO] web_harvester.core.engine: Total requests made: 1, total items collected: 0, skipped known URLs: 0, skipped by robots.txt: 0, article pages skipped (dry run): 20
+Dry run finished: 20 article page(s) would be fetched, 0 item(s) stored.
 ```
 
 單筆輸出（完整範例見 [examples/sample_output.json](examples/sample_output.json)）：
@@ -61,7 +69,7 @@ $ python main.py --site udn_news --max-items 3
 
 ```mermaid
 flowchart LR
-    CLI["main.py<br/>CLI"] --> CFG["Settings<br/>YAML + JSON Schema"]
+    CLI["web_harvester/cli.py<br/>CLI"] --> CFG["Settings<br/>YAML + JSON Schema"]
     CFG --> ENGINE["CrawlerEngine<br/>sync / async"]
     ENGINE --> HTTP["HttpClient<br/>curl_cffi / httpx"]
     ENGINE --> ROBOTS["RobotsPolicy<br/>robots.txt"]
@@ -77,18 +85,19 @@ flowchart LR
 
 ```
 web-harvester/
-├── main.py                  # 主程式進入點（CLI）
-├── requirements.txt         # 執行期依賴
-├── requirements-dev.txt     # 開發與 CI 依賴
-├── pyproject.toml           # ruff / mypy / pytest / coverage 設定
+├── main.py                  # 相容入口（轉呼叫 web_harvester.cli:main）
+├── requirements.txt         # pip install -r 入口（內容為 .）
+├── requirements-dev.txt     # 開發與 CI 用（內容為 -e .[dev]）
+├── pyproject.toml           # 套件中繼資料、依賴、console script、ruff / mypy / pytest / coverage 設定
 ├── config/
 │   ├── settings.yaml       # 全域設定（引擎、日誌、儲存）
 │   ├── category_normalization.yaml  # 跨站分類統一對應表（Settings 自動合併）
 │   ├── schema/             # 設定檔驗證 JSON Schema
 │   └── sites/              # 站點設定（example / full_example 與 9 個新聞站）
 ├── docs/                   # site-config / global-config / logging / storage / architecture
-├── src/
-│   ├── core/               # 核心引擎（Engine、Request、Response、Item、HttpClient、Retry）
+├── web_harvester/
+│   ├── cli.py              # CLI 進入點（console script: web-harvester）
+│   ├── core/               # 核心引擎（Engine、Request、Response、Item、HttpClient、Retry、Robots）
 │   ├── crawler/            # 爬蟲邏輯（BaseCrawler、SiteCrawler、Classifier）
 │   ├── parsers/            # 解析器（HTMLParser、JSONParser）
 │   ├── storage/            # 儲存後端（JSON、Database）
@@ -104,22 +113,35 @@ python -m venv .venv
 .venv\Scripts\activate      # Windows
 source .venv/bin/activate   # macOS / Linux
 
-pip install -r requirements.txt
+# 開發用（含 pytest / ruff / mypy）
+pip install -e ".[dev]"
 ```
+
+安裝後會取得 `web-harvester` 指令；不安裝也可以直接在專案根目錄用 `python main.py`。
 
 ## 快速開始
 
 ```bash
-python main.py --list-sites          # 列出可用站點
-python main.py --site udn_news       # 執行內建範例（聯合新聞網）
+web-harvester --list-sites          # 列出可用站點
+web-harvester --site udn_news       # 執行內建範例（聯合新聞網）
+web-harvester --all-sites --max-items 5   # 依序跑完所有站點
+```
+
+設定目錄的解析順序為：`--config-dir` > 環境變數 `WEB_HARVESTER_CONFIG_DIR` > 目前目錄（含上層）的 `config/` > `~/.config/web-harvester`。因此從其他目錄執行時，用 `--config-dir` 指定即可：
+
+```bash
+web-harvester --site udn_news --config-dir /path/to/web-harvester/config
 ```
 
 ### CLI 選項
 
 | 參數 | 說明 |
 |------|------|
-| `--site <name>` / `-s` | 指定站點 ID（對應 `config/sites/<name>.yaml`） |
+| `--site <name>` / `-s` | 指定站點 ID（對應 `<config-dir>/sites/<name>.yaml`） |
+| `--all-sites` / `-a` | 依序爬取設定目錄下所有站點，結束時輸出彙總表 |
 | `--list-sites` / `-l` | 列出所有站點後退出 |
+| `--config-dir <dir>` | 指定設定目錄（含 `settings.yaml`、`sites/`、`schema/`） |
+| `--dry-run` | 只請求列表頁並統計可抓文章數，不抓文章頁、不寫入資料 |
 | `--keyword <kw>` / `-k` | 關鍵字搜尋（需站點設定支援 `{keyword}` 的來源） |
 | `--category <名稱>` / `-c` | 分類篩選（需站點設定 `categories`） |
 | `--max-items N` | 覆寫 `limits.max_items` |
@@ -131,9 +153,9 @@ python main.py --site udn_news       # 執行內建範例（聯合新聞網）
 關鍵字與分類可組合使用：
 
 ```bash
-python main.py --site udn_news --keyword 台股
-python main.py --site udn_news --category 股市
-python main.py --site udn_news --keyword 台股 --category 股市
+web-harvester --site udn_news --keyword 台股
+web-harvester --site udn_news --category 股市
+web-harvester --site udn_news --keyword 台股 --category 股市
 ```
 
 ## 新增一個站點
@@ -176,7 +198,7 @@ article_page:
 ```
 
 ```bash
-python main.py --site example
+web-harvester --site example
 ```
 
 設定不符 schema 時會在啟動階段立即失敗並指出欄位路徑。完整欄位、POST `body`/`json_body`、游標分頁、`url_filter`、分類與標籤來源請見 [docs/site-config.md](docs/site-config.md)。
@@ -223,11 +245,11 @@ python main.py --site example
 ## 開發與測試
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 
-pytest                    # 337 passed
-pytest --cov              # 覆蓋率 90%（門檻 85%）
-ruff check src main.py test
+pytest                    # 357 passed
+pytest --cov              # 覆蓋率 91%（門檻 85%）
+ruff check web_harvester main.py test
 mypy
 ```
 

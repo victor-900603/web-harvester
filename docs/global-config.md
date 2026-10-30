@@ -2,6 +2,18 @@
 
 全域設定檔為 `config/settings.yaml`，由 `config/schema/settings.schema.json` 嚴格驗證。`config/category_normalization.yaml` 會由 `Settings` 自動合併至 `category_normalization` 欄位（兩處同時存在時以 `settings.yaml` 內的值優先）。
 
+## 設定目錄解析
+
+程式不再假設從專案根目錄執行。設定目錄的解析順序（`web_harvester/utils/config.py:resolve_config_dir`）：
+
+1. CLI `--config-dir <dir>`
+2. 環境變數 `WEB_HARVESTER_CONFIG_DIR`
+3. 目前工作目錄下的 `config/`
+4. 由目前工作目錄逐層向上的 `config/`
+5. `~/.config/web-harvester`
+
+候選目錄必須含有 `settings.yaml` 才算命中。明確指定的目錄（來源 1、2）若不含 `settings.yaml` 會直接報錯，不會靜默退回其他路徑。全部落空時拋 `ConfigDirNotFound`，訊息會列出所有嘗試過的路徑。
+
 ## 完整範例
 
 ```yaml
@@ -74,7 +86,7 @@ category_normalization: {}
 - 延遲計算：`min(base_delay * multiplier ** (已失敗次數 - 1), max_delay)`，再依 `jitter` 加入隨機抖動（`full` 為 `[0, delay]` 均勻分布，`equal` 為 `[delay/2, delay]`，`none` 不加）。
 - `respect_retry_after` 為 `true` 時，若錯誤回應帶有 `Retry-After`（支援秒數與 HTTP-date）則採用，但仍以 `max_delay` 封頂，避免伺服器回傳過大值造成長時間等待。
 - `max_retries` 為總嘗試次數；最後一次失敗後不再等待，直接放棄該請求。
-- 共用實作位於 `src/core/retry.py`（`BackoffPolicy` 等），sync / async 模式行為一致。
+- 共用實作位於 `web_harvester/core/retry.py`（`BackoffPolicy` 等），sync / async 模式行為一致。
 
 ### request
 
@@ -88,7 +100,7 @@ category_normalization: {}
 | `request.ja3` | 自訂 JA3 字串，僅 `impersonate=""` 且 `http_client=curl_cffi` 時生效；有 impersonate 時被忽略並記 warning | - |
 | `request.akamai` | 自訂 Akamai HTTP/2 指紋，僅 `impersonate=""` 且 `http_client=curl_cffi` 時生效 | - |
 
-支援的 `impersonate` 枚舉（`config/schema/settings.schema.json`）：`chrome99`/`chrome100`/`chrome101`/`chrome104`/`chrome107`/`chrome110`/`chrome116`/`chrome119`/`chrome120`/`chrome122`/`chrome124`/`chrome131`/`chrome131_android`/`safari15_3`/`safari15_5`/`safari17_0`/`safari17_2_ios`/`safari18_0`/`safari18_0_ios`/`firefox133`/`edge101`/`edge122`/`""`。實作位於 `src/core/http_client/factory.py:build_http_client` / `src/core/http_client/curl_cffi_client.py:CurlCffiClient`（常數見 `constants.py`，抽象見 `base.py`），引擎透過 `CrawlerEngine._http_client` 委派（`src/core/engine.py`）。
+支援的 `impersonate` 枚舉（`config/schema/settings.schema.json`）：`chrome99`/`chrome100`/`chrome101`/`chrome104`/`chrome107`/`chrome110`/`chrome116`/`chrome119`/`chrome120`/`chrome122`/`chrome124`/`chrome131`/`chrome131_android`/`safari15_3`/`safari15_5`/`safari17_0`/`safari17_2_ios`/`safari18_0`/`safari18_0_ios`/`firefox133`/`edge101`/`edge122`/`""`。實作位於 `web_harvester/core/http_client/factory.py:build_http_client` / `web_harvester/core/http_client/curl_cffi_client.py:CurlCffiClient`（常數見 `constants.py`，抽象見 `base.py`），引擎透過 `CrawlerEngine._http_client` 委派（`web_harvester/core/engine.py`）。
 
 ### limits
 
@@ -116,9 +128,9 @@ category_normalization: {}
 可透過 CLI 參數臨時覆寫（僅本次執行生效，不寫回設定檔），適用於所有站點：
 
 ```bash
-python main.py --site udn_news --max-items 50
-python main.py --site udn_news --max-pages 5 --timeout 120
-python main.py --site udn_news --no-stop-on-duplicate
+web-harvester --site udn_news --max-items 50
+web-harvester --site udn_news --max-pages 5 --timeout 120
+web-harvester --site udn_news --no-stop-on-duplicate
 ```
 
 | 參數 | 覆寫欄位 | 說明 |
@@ -128,6 +140,7 @@ python main.py --site udn_news --no-stop-on-duplicate
 | `--stop-on-duplicate` / `--no-stop-on-duplicate` | `limits.stop_on_duplicate` | 遇到重複 URL 是否停止 |
 | `--timeout SEC` | `limits.timeout` | 整體爬取逾時（秒，> 0） |
 | `--skip-seen` / `--no-skip-seen` | `engine.skip_seen_urls` | 是否略過儲存後端已存的 URL |
+| `--dry-run` | 無（僅本次執行） | 只請求列表頁並統計可抓文章數，不抓文章頁、不寫入 |
 
 ## 增量爬取
 
@@ -141,7 +154,7 @@ python main.py --site udn_news --no-stop-on-duplicate
 ## robots.txt 檢查
 
 `request.respect_robots` 預設為 `true`，站點層級的 `request.respect_robots` 優先於全域設定。
-實作位於 `src/core/robots.py`。
+實作位於 `web_harvester/core/robots.py`。
 
 - 以 origin（scheme + host + port）為快取單位，同一次執行對每個 origin 只抓一次 robots.txt。
 - robots.txt 回 4xx 時視為允許全部；回 5xx 或連線失敗時記 warning、跳過該次請求，且不保留結果（下次執行重新嘗試）。

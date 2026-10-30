@@ -1,6 +1,6 @@
 # 儲存設定說明
 
-儲存設定位於 `config/settings.yaml` 的 `json_storage` 與 `database` 區塊，由 `config/schema/settings.schema.json` 驗證。兩者可同時啟用，由 `src/core/engine.py:build_engine` 掛載。
+儲存設定位於 `config/settings.yaml` 的 `json_storage` 與 `database` 區塊，由 `config/schema/settings.schema.json` 驗證。兩者可同時啟用，由 `web_harvester/core/engine.py:build_engine` 掛載。
 
 ## 完整範例
 
