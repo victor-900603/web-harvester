@@ -43,6 +43,10 @@
           "type": "integer",
           "minimum": 0
         },
+        "skip_seen_urls": {
+          "type": "boolean",
+          "description": "Skip requests whose URL is already stored by a storage backend (incremental crawling)."
+        },
         "retry": {
           "type": "object",
           "additionalProperties": false,
@@ -86,6 +90,10 @@
         },
         "verify_ssl": {
           "type": "boolean"
+        },
+        "respect_robots": {
+          "type": "boolean",
+          "description": "Skip URLs disallowed by robots.txt. A site config may override this value."
         },
         "http_client": {
           "type": "string",

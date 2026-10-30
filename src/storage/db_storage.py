@@ -68,6 +68,17 @@ class DatabaseStorage(BaseStorage):
         finally:
             session.close()
 
+    def known_urls(self) -> set[str]:
+        """Return every article URL already stored, in a single query."""
+        session = get_session()
+        try:
+            return {url for (url,) in session.query(Article.url).all() if url}
+        except Exception as e:
+            logger.error(f"Failed to load known URLs from the database: {e}", exc_info=True)
+            return set()
+        finally:
+            session.close()
+
     def _store(self, item: Item, session: DBSession) -> None:
         data = item.data
         url = data.get("url", item.url)

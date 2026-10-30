@@ -20,12 +20,14 @@ engine:
     multiplier: 2.0           # Growth factor per attempt
     jitter: "full"            # none | full | equal (randomize to avoid thundering herd)
     respect_retry_after: true # Honor the Retry-After header, capped at max_delay
+  skip_seen_urls: true        # Skip requests whose URL is already stored (incremental mode)
 
 # Global HTTP request settings applied to every request.
 request:
   user_agent: "web-harvester/1.0"
   verify_ssl: true            # Set to false only for development/testing with self-signed certs
   http_client: "curl_cffi"    # curl_cffi (TLS fingerprint impersonation) | httpx (fallback)
+  respect_robots: true        # Skip URLs disallowed by robots.txt (per-site override available)
   impersonate: "chrome131"    # Browser to impersonate (JA3/Akamai). "" disables; when set, ja3/akamai are ignored
   # ja3: ""                   # Custom JA3 string — only when impersonate is "" and http_client is curl_cffi
   # akamai: ""                # Custom Akamai string — only when impersonate is "" and http_client is curl_cffi

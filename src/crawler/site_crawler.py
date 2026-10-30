@@ -55,6 +55,11 @@ class SiteCrawler(BaseCrawler):
         """Site-level crawl limits from the configuration."""
         return self._limits
 
+    @property
+    def respect_robots(self) -> bool | None:
+        """Site-level override for ``request.respect_robots``; None uses the global value."""
+        return self._request_cfg.get("respect_robots")
+
     def _select_list_cfg(self) -> Dict[str, Any]:
         """Return the list_page config to use for the requested keyword/category.
 

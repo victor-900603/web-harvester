@@ -26,6 +26,15 @@ class BaseStorage(ABC):
         for item in items:
             self.save(item)
 
+    def known_urls(self) -> set[str]:
+        """Return the item URLs already stored by this backend.
+
+        Used for cross-run deduplication (``engine.skip_seen_urls``). The default
+        returns an empty set, meaning the backend does not support incremental
+        crawling; override it when the backend can answer the query cheaply.
+        """
+        return set()
+
     def close(self) -> None:
         """Close any resources used by the storage backend."""
         pass

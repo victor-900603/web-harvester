@@ -91,6 +91,10 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "respect_robots": {
+          "type": "boolean",
+          "description": "Site-level override for the global request.respect_robots setting."
         }
       }
     },

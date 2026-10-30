@@ -13,6 +13,11 @@ from src.storage.models import Article
 
 
 class TestJSONStorage:
+    def test_known_urls_unsupported(self, tmp_path):
+        storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True)
+        assert storage.known_urls() == set()
+        storage.close()
+
     def test_batch_mode_writes_on_close(self, tmp_path):
         storage = JSONStorage(output_dir=str(tmp_path), batch_mode=True)
         storage.save(make_item(url="https://example.com/1", title="A"))
@@ -125,6 +130,25 @@ class TestDatabaseStorage:
             session.close()
             storage.close()
             close_database()
+
+    def test_known_urls_returns_stored_urls(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        assert storage.known_urls() == set()
+        storage.save(make_item(url="https://example.com/1"))
+        storage.save(make_item(url="https://example.com/2"))
+        assert storage.known_urls() == {"https://example.com/1", "https://example.com/2"}
+        storage.close()
+        close_database()
+
+    def test_known_urls_uses_data_url(self, tmp_path):
+        db_url = f"sqlite:///{tmp_path}/test.db"
+        storage = DatabaseStorage(db_url=db_url)
+        item = Item(data={"url": "https://example.com/data"}, source="example", url="https://example.com/item")
+        storage.save(item)
+        assert storage.known_urls() == {"https://example.com/data"}
+        storage.close()
+        close_database()
 
     def test_save_many(self, tmp_path):
         db_url = f"sqlite:///{tmp_path}/test.db"

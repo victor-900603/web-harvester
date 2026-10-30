@@ -75,8 +75,9 @@ class TestMain:
             captured["setup"] = kwargs
 
         class FakeEngine:
-            def __init__(self, settings):
+            def __init__(self, settings, **kwargs):
                 captured["engine_settings"] = settings
+                captured["engine_kwargs"] = kwargs
 
             def run(self, crawler):
                 captured["crawler"] = crawler
@@ -119,7 +120,7 @@ class TestMain:
             pass
 
         class FakeEngine:
-            def __init__(self, settings):
+            def __init__(self, settings, **kwargs):
                 pass
 
             def run(self, crawler):
@@ -144,6 +145,39 @@ class TestMain:
                 "limit_overrides": {},
             },
         )
+
+    def test_skip_seen_flags_forwarded_to_engine(self, monkeypatch):
+        captured = []
+
+        def fake_load(site_id):
+            return {"name": "example"}
+
+        class FakeSettings:
+            def get(self, key, default=None):
+                return {"logging.level": "INFO"}.get(key, default)
+
+        class FakeEngine:
+            def __init__(self, settings, **kwargs):
+                captured.append(kwargs)
+
+            def run(self, crawler):
+                pass
+
+        monkeypatch.setattr(main, "load_site_config", fake_load)
+        monkeypatch.setattr(main, "Settings", FakeSettings)
+        monkeypatch.setattr(main, "setup_logging", lambda **kw: None)
+        monkeypatch.setattr(main, "build_engine", FakeEngine)
+        monkeypatch.setattr(main, "SiteCrawler", lambda cfg, **kw: "crawler")
+
+        assert main.main(["--site", "example"]) == 0
+        assert main.main(["--site", "example", "--skip-seen"]) == 0
+        assert main.main(["--site", "example", "--no-skip-seen"]) == 0
+
+        assert captured == [
+            {"skip_seen_urls": None},
+            {"skip_seen_urls": True},
+            {"skip_seen_urls": False},
+        ]
 
     def test_unknown_site_errors(self, monkeypatch, capsys):
         def fake_load(site_id):

@@ -79,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SEC",
         help="覆寫 limits.timeout：整體爬取逾時秒數（> 0）",
     )
+    parser.add_argument(
+        "--skip-seen",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="覆寫 engine.skip_seen_urls：已存在於資料庫的 URL 是否跳過（預設沿用設定值）",
+    )
     return parser
 
 
@@ -131,7 +137,8 @@ def main(argv: list | None = None) -> int:
         backup_count=settings.get("logging.backup_count", 5),
     )
 
-    engine = build_engine(settings)
+    engine = build_engine(settings, skip_seen_urls=args.skip_seen)
+
     crawler = SiteCrawler(
         site_config,
         category_normalization=settings.get("category_normalization"),

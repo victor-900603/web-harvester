@@ -9,6 +9,7 @@ import pytest
 from src.core import Item, Request
 from src.core.engine import CrawlerEngine, build_engine
 from src.crawler import BaseCrawler
+from src.storage import BaseStorage
 
 
 class FakeCrawler(BaseCrawler):
@@ -33,7 +34,7 @@ class FakeCrawler(BaseCrawler):
         yield Item(data={"title": response.url}, source=self.name, url=response.url)
 
 
-def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None):
+def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None, respect_robots=False, skip_seen_urls=None):
     engine_cfg = {
         "mode": mode,
         "max_concurrency": concurrency,
@@ -43,7 +44,10 @@ def make_engine(mode="sync", concurrency=1, max_retries=1, retry=None):
     }
     if retry is not None:
         engine_cfg["retry"] = retry
-    return CrawlerEngine({"engine": engine_cfg, "request": {}})
+    return CrawlerEngine(
+        {"engine": engine_cfg, "request": {"respect_robots": respect_robots}},
+        skip_seen_urls=skip_seen_urls,
+    )
 
 
 class TestSyncLimits:
@@ -432,3 +436,199 @@ def _fake_sync_process(self, request):
 
 async def _fake_async_fetch(self, request):
     return _response(request)
+
+
+class KnownURLStorage(BaseStorage):
+    """Storage stub that reports a fixed set of already stored URLs."""
+
+    def __init__(self, urls=()):
+        self._urls = set(urls)
+
+    def save(self, item):
+        self._urls.add(item.url)
+
+    def known_urls(self):
+        return set(self._urls)
+
+
+class FakeRobots:
+    """Robots policy stub driven by an explicit allowlist."""
+
+    def __init__(self, allowed_urls):
+        self.allowed_urls = set(allowed_urls)
+
+    def allowed(self, url):
+        return url in self.allowed_urls
+
+    async def allowed_async(self, url):
+        return url in self.allowed_urls
+
+
+def _counting_process(calls):
+    def fake_process(self, request):
+        calls.append(request.url)
+        return _response(request)
+
+    return fake_process
+
+
+def _counting_async_fetch(calls):
+    async def fake_fetch(self, request):
+        calls.append(request.url)
+        return _response(request)
+
+    return fake_fetch
+
+
+class TestSkipSeenURLs:
+    def test_known_url_is_not_fetched(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync")
+        engine.add_storage(KnownURLStorage({"https://e.com/old"}))
+        crawler = FakeCrawler(["https://e.com/old", "https://e.com/new"])
+        items = engine.run(crawler)
+        assert calls == ["https://e.com/new"]
+        assert [item.url for item in items] == ["https://e.com/new"]
+        assert engine._skipped_known == 1
+
+    def test_skipped_when_disabled(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", skip_seen_urls=False)
+        engine.add_storage(KnownURLStorage({"https://e.com/old"}))
+        crawler = FakeCrawler(["https://e.com/old"])
+        items = engine.run(crawler)
+        assert calls == ["https://e.com/old"]
+        assert len(items) == 1
+        assert engine._skipped_known == 0
+
+    def test_known_url_stops_when_stop_on_duplicate(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync")
+        engine.add_storage(KnownURLStorage({"https://e.com/old"}))
+        crawler = FakeCrawler(["https://e.com/old", "https://e.com/new"], {"stop_on_duplicate": True})
+        items = engine.run(crawler)
+        assert calls == []
+        assert items == []
+
+    def test_no_storage_means_no_skipping(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync")
+        crawler = FakeCrawler(["https://e.com/a", "https://e.com/b"])
+        items = engine.run(crawler)
+        assert len(calls) == 2
+        assert len(items) == 2
+
+    def test_known_url_skipped_in_async_mode(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", _counting_async_fetch(calls))
+        engine = make_engine("async")
+        engine.add_storage(KnownURLStorage({"https://e.com/old"}))
+        items = engine.run(FakeCrawler(["https://e.com/old", "https://e.com/new"]))
+        assert calls == ["https://e.com/new"]
+        assert len(items) == 1
+        assert engine._skipped_known == 1
+
+    def test_storage_failure_does_not_abort_run(self, monkeypatch, caplog):
+        class BrokenStorage(BaseStorage):
+            def save(self, item):
+                pass
+
+            def known_urls(self):
+                raise RuntimeError("db down")
+
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync")
+        engine.add_storage(BrokenStorage())
+        items = engine.run(FakeCrawler(["https://e.com/a"]))
+        assert len(items) == 1
+        assert any("Failed to load known URLs" in rec.getMessage() for rec in caplog.records)
+
+
+class TestRobotsEnforcement:
+    def test_disallowed_url_is_not_fetched(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", respect_robots=True)
+        engine._robots = FakeRobots({"https://e.com/allowed"})
+        items = engine.run(FakeCrawler(["https://e.com/allowed", "https://e.com/blocked"]))
+        assert calls == ["https://e.com/allowed"]
+        assert len(items) == 1
+        assert engine._skipped_robots == 1
+
+    def test_disabled_by_settings(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", respect_robots=False)
+        engine._robots = FakeRobots(set())
+        items = engine.run(FakeCrawler(["https://e.com/blocked"]))
+        assert len(calls) == 1
+        assert len(items) == 1
+        assert engine._skipped_robots == 0
+
+    def test_site_override_disables_check(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", respect_robots=True)
+        engine._robots = FakeRobots(set())
+
+        class SiteOverrideCrawler(FakeCrawler):
+            @property
+            def respect_robots(self):
+                return False
+
+        items = engine.run(SiteOverrideCrawler(["https://e.com/blocked"]))
+        assert len(calls) == 1
+        assert len(items) == 1
+
+    def test_site_override_enables_check(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_process_sync", _counting_process(calls))
+        engine = make_engine("sync", respect_robots=False)
+        engine._robots = FakeRobots(set())
+
+        class SiteOverrideCrawler(FakeCrawler):
+            @property
+            def respect_robots(self):
+                return True
+
+        items = engine.run(SiteOverrideCrawler(["https://e.com/blocked"]))
+        assert calls == []
+        assert items == []
+        assert engine._skipped_robots == 1
+
+    def test_disallowed_in_async_mode(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(CrawlerEngine, "_fetch_async", _counting_async_fetch(calls))
+        engine = make_engine("async", respect_robots=True)
+        engine._robots = FakeRobots(set())
+        items = engine.run(FakeCrawler(["https://e.com/blocked"]))
+        assert calls == []
+        assert items == []
+        assert engine._skipped_robots == 1
+
+
+class TestBuildEngineSkipSeen:
+    def test_cli_override_is_applied(self, tmp_path):
+        settings = {
+            "engine": {"skip_seen_urls": True},
+            "json_storage": {"enabled": False},
+            "database": {"enabled": False},
+        }
+        engine = build_engine(settings, skip_seen_urls=False)
+        assert engine._skip_seen_urls is False
+        engine.close()
+
+    def test_configured_value_is_used_when_no_override(self, tmp_path):
+        settings = {
+            "engine": {"skip_seen_urls": False},
+            "json_storage": {"enabled": False},
+            "database": {"enabled": False},
+        }
+        engine = build_engine(settings)
+        assert engine._skip_seen_urls is False
+        engine.close()

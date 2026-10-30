@@ -15,6 +15,11 @@ class BaseCrawler(ABC):
     def limits(self) -> dict:
         return {}
 
+    @property
+    def respect_robots(self) -> bool | None:
+        """Site-level override for ``request.respect_robots``; None uses the global value."""
+        return None
+
     @abstractmethod
     def start_requests(self) -> Generator[Request, None, None]:
         """Generate the initial requests to crawl.
