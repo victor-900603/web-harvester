@@ -4,11 +4,17 @@
 # 列表為官方 JSON API（api.news.tvbs.app），每頁 16 筆。
 # 分頁為 cursor-based：由 meta.pagination.next_cursor 帶入 URL 的 {cursor}。
 # 分類頁為 Astro SSR、/realtime 為前端渲染，故列表改用 API。
+#
+# 注意：api.news.tvbs.app/robots.txt 為 User-agent: * / Disallow: /，
+# 本站因此以 request.respect_robots: false 明確關閉 robots 檢查。
+# 此設定會套用到整個站點（含 news.tvbs.com.tw 的文章頁），
+# 是否接受由使用者自行判斷。
 
 name: "TVBS新聞網"
 base_url: "https://news.tvbs.com.tw"
 
 request:
+  respect_robots: false
   headers:
     Referer: "https://news.tvbs.com.tw"
 
